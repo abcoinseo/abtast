@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motion Detector Pro</title>
+    <title>Motion Detector Pro - 3 Target Areas</title>
     <style>
         body {
             font-family: sans-serif;
@@ -13,61 +13,86 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            background-color: #f0f0f0;
+            background-color: #f4f4f4;
         }
 
         #videoContainer {
             width: 640px;
             height: 480px;
-            position: relative; /* For overlaying detection area */
+            position: relative;
             margin-bottom: 20px;
         }
 
         #videoElement {
             width: 100%;
             height: 100%;
-            background-color: #000; /* Default background if video isn't loaded */
+            background-color: #000;
         }
 
-        #detectionArea {
+        .detectionArea {
             position: absolute;
-            top: 10%;
-            left: 10%;
-            width: 80%;
-            height: 80%;
-            border: 2px dashed rgba(255, 0, 0, 0.5); /* Red dashed border */
-            pointer-events: none; /* Allow clicks through to the video */
+            border: 2px dashed rgba(255, 0, 0, 0.5);
+            pointer-events: none;
         }
 
-        #detectionAreaIndicator {
+        .detectionAreaIndicator {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(255, 0, 0, 0); /* Initially transparent */
+            background-color: rgba(255, 0, 0, 0);
             transition: background-color 0.2s ease-in-out;
             pointer-events: none;
         }
 
+        #detectionArea1 {
+            top: 10%;
+            left: 10%;
+            width: 25%;
+            height: 25%;
+        }
+
+        #detectionArea2 {
+            top: 40%;
+            left: 40%;
+            width: 25%;
+            height: 25%;
+        }
+
+        #detectionArea3 {
+            top: 70%;
+            left: 70%;
+            width: 25%;
+            height: 25%;
+        }
 
         #controls {
             display: flex;
+            flex-direction: column; /* Stack controls vertically */
+            align-items: center;
             gap: 10px;
             margin-bottom: 20px;
         }
 
+        .areaControls {
+            display: flex;
+            align-items: center; /* Align items in a row */
+            gap: 5px;
+        }
+
         button {
             padding: 10px 20px;
-            background-color: #4CAF50;
+            background-color: #007bff;
+            border: 1px solid #007bff;
             color: white;
-            border: none;
             cursor: pointer;
             border-radius: 5px;
         }
 
         button:hover {
-            background-color: #3e8e41;
+            background-color: #0056b3;
+            border-color: #0056b3;
         }
 
         #sensitivitySlider {
@@ -77,7 +102,7 @@
         #status {
             font-size: 1.2em;
             font-weight: bold;
-            color: #333;
+            color: #28a745;
         }
 
         #log {
@@ -89,41 +114,37 @@
             overflow-y: scroll;
             font-family: monospace;
             font-size: 0.9em;
+            background-color: #fff;
         }
 
-        /* "Pro" Styling -  Subtle and Clean */
-        body {
-            background-color: #f4f4f4; /* Lighter background */
-        }
-
-        button {
-            background-color: #007bff; /* Professional Blue */
-            border: 1px solid #007bff;
+        .areaToggleButton {
+            padding: 5px 10px;
+            background-color: #6c757d;
             color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
         }
 
-        button:hover {
-            background-color: #0056b3;
-            border-color: #0056b3;
-        }
-
-        #status {
-            color: #28a745; /* Success Green */
-        }
-
-        #log {
-            background-color: #fff; /* White Log Background */
+        .areaToggleButton.active {
+            background-color: #28a745; /* Green when active */
         }
     </style>
 </head>
 <body>
 
-    <h1>Motion Detector Pro</h1>
+    <h1>Motion Detector Pro - 3 Target Areas</h1>
 
     <div id="videoContainer">
         <video id="videoElement" autoplay muted></video>
-        <div id="detectionArea">
-            <div id="detectionAreaIndicator"></div>
+        <div id="detectionArea1" class="detectionArea">
+            <div class="detectionAreaIndicator"></div>
+        </div>
+        <div id="detectionArea2" class="detectionArea">
+            <div class="detectionAreaIndicator"></div>
+        </div>
+        <div id="detectionArea3" class="detectionArea">
+            <div class="detectionAreaIndicator"></div>
         </div>
     </div>
 
@@ -131,11 +152,24 @@
         <button id="startStopButton">Start Detection</button>
         <label for="sensitivitySlider">Sensitivity:</label>
         <input type="range" id="sensitivitySlider" min="1" max="100" value="20">
+
+        <div class="areaControls">
+            <label>Area 1:</label>
+            <button id="area1ToggleButton" class="areaToggleButton active">On</button>
+        </div>
+        <div class="areaControls">
+            <label>Area 2:</label>
+            <button id="area2ToggleButton" class="areaToggleButton active">On</button>
+        </div>
+        <div class="areaControls">
+            <label>Area 3:</label>
+            <button id="area3ToggleButton" class="areaToggleButton active">On</button>
+        </div>
+
     </div>
 
     <div id="status">Status: Ready</div>
     <div id="log"></div>
-
 
     <script>
         const videoElement = document.getElementById('videoElement');
@@ -143,22 +177,31 @@
         const sensitivitySlider = document.getElementById('sensitivitySlider');
         const statusElement = document.getElementById('status');
         const logElement = document.getElementById('log');
-        const detectionAreaIndicator = document.getElementById('detectionAreaIndicator');
+
+        const area1ToggleButton = document.getElementById('area1ToggleButton');
+        const area2ToggleButton = document.getElementById('area2ToggleButton');
+        const area3ToggleButton = document.getElementById('area3ToggleButton');
+
+        const detectionArea1 = document.getElementById('detectionArea1');
+        const detectionArea2 = document.getElementById('detectionArea2');
+        const detectionArea3 = document.getElementById('detectionArea3');
 
         let streaming = false;
-        let rafId; // RequestAnimationFrame ID
+        let rafId;
         let previousFrameData;
         let isDetecting = false;
 
+        let area1Active = true;
+        let area2Active = true;
+        let area3Active = true;
+
         const width = 640;
         const height = 480;
-        let sensitivity = parseInt(sensitivitySlider.value);  // Get initial sensitivity
+        let sensitivity = parseInt(sensitivitySlider.value);
+        const motionThreshold = 50;
+        const areaThreshold = 0.01;
 
-        // Configuration - Can be tweaked for performance and accuracy
-        const motionThreshold = 50; // Higher means less sensitive
-        const areaThreshold = 0.01; // Percentage of detection area with motion to trigger
 
-        // Utility functions
         function log(message) {
             logElement.innerHTML = new Date().toLocaleTimeString() + ': ' + message + '<br>' + logElement.innerHTML;
         }
@@ -192,15 +235,32 @@
             const currentFrameData = ctx.getImageData(0, 0, width, height).data;
 
             if (previousFrameData) {
-                let motionPixels = 0;
-                const detectionStartX = Math.floor(width * 0.1);  // 10% from left
-                const detectionStartY = Math.floor(height * 0.1); // 10% from top
-                const detectionWidth = Math.floor(width * 0.8);   // 80% width
-                const detectionHeight = Math.floor(height * 0.8);  // 80% height
+                detectMotionInArea(currentFrameData, 'detectionArea1', area1Active);
+                detectMotionInArea(currentFrameData, 'detectionArea2', area2Active);
+                detectMotionInArea(currentFrameData, 'detectionArea3', area3Active);
+            }
 
-                for (let y = detectionStartY; y < detectionStartY + detectionHeight; y++) {
-                    for (let x = detectionStartX; x < detectionStartX + detectionWidth; x++) {
-                        const i = (y * width + x) * 4;  // RGBA
+            previousFrameData = currentFrameData;
+        }
+
+        function detectMotionInArea(currentFrameData, areaId, isActive) {
+            if (!isActive) return;
+
+            const areaElement = document.getElementById(areaId);
+            const indicator = areaElement.querySelector('.detectionAreaIndicator');
+            const rect = areaElement.getBoundingClientRect();
+
+            const detectionStartX = Math.floor(rect.left - videoElement.getBoundingClientRect().left);
+            const detectionStartY = Math.floor(rect.top - videoElement.getBoundingClientRect().top);
+            const detectionWidth = Math.floor(rect.width);
+            const detectionHeight = Math.floor(rect.height);
+
+             let motionPixels = 0;
+
+            for (let y = detectionStartY; y < detectionStartY + detectionHeight; y++) {
+                for (let x = detectionStartX; x < detectionStartX + detectionWidth; x++) {
+                     if (x >= 0 && x < width && y >= 0 && y < height) {  // bounds checking
+                        const i = (y * width + x) * 4;
                         const r1 = previousFrameData[i];
                         const g1 = previousFrameData[i + 1];
                         const b1 = previousFrameData[i + 2];
@@ -216,25 +276,23 @@
                         }
                     }
                 }
-
-                const totalPixelsInArea = detectionWidth * detectionHeight;
-                const motionPercentage = motionPixels / totalPixelsInArea;
-
-                if (motionPercentage > areaThreshold) {
-                    log('Motion Detected!');
-                    detectionAreaIndicator.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red highlight
-                    setTimeout(() => {
-                        detectionAreaIndicator.style.backgroundColor = 'rgba(255, 0, 0, 0)'; // Back to transparent
-                    }, 300); // Short highlight duration
-                }
             }
 
-            previousFrameData = currentFrameData;
+            const totalPixelsInArea = detectionWidth * detectionHeight;
+            const motionPercentage = motionPixels / totalPixelsInArea;
+
+            if (motionPercentage > areaThreshold) {
+                log(`Motion Detected in ${areaId}!`);
+                indicator.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+                setTimeout(() => {
+                    indicator.style.backgroundColor = 'rgba(255, 0, 0, 0)';
+                }, 300);
+            }
         }
 
         function startDetection() {
             if(!streaming) {
-                alert("Camera not ready.  Please allow camera access.");
+                alert("Camera not ready. Please allow camera access.");
                 return;
             }
             isDetecting = true;
@@ -246,7 +304,7 @@
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(videoElement, 0, 0, width, height);
-            previousFrameData = ctx.getImageData(0, 0, width, height).data; // Initial frame
+            previousFrameData = ctx.getImageData(0, 0, width, height).data;
             detectMotion();
         }
 
@@ -255,11 +313,10 @@
             startStopButton.textContent = 'Start Detection';
             statusElement.textContent = 'Ready';
             log('Detection stopped.');
-            cancelAnimationFrame(rafId); // Stop animation frame
-            previousFrameData = null; // Clear previous frame
+            cancelAnimationFrame(rafId);
+            previousFrameData = null;
         }
 
-        // Event Listeners
         startStopButton.addEventListener('click', () => {
             if (isDetecting) {
                 stopDetection();
@@ -272,17 +329,32 @@
             sensitivity = parseInt(sensitivitySlider.value);
         });
 
-
-        //On Load
         videoElement.addEventListener('loadedmetadata', () => {
             videoElement.width = width;
             videoElement.height = height;
         });
 
+        function toggleArea(areaId, toggleButton, isActive) {
+            isActive = !isActive;
+            toggleButton.classList.toggle('active', isActive);
+            toggleButton.textContent = isActive ? 'On' : 'Off';
+            return isActive;
+        }
+
+        area1ToggleButton.addEventListener('click', () => {
+            area1Active = toggleArea('detectionArea1', area1ToggleButton, area1Active);
+        });
+
+        area2ToggleButton.addEventListener('click', () => {
+            area2Active = toggleArea('detectionArea2', area2ToggleButton, area2Active);
+        });
+
+        area3ToggleButton.addEventListener('click', () => {
+            area3Active = toggleArea('detectionArea3', area3ToggleButton, area3Active);
+        });
+
 
         initCamera();
-
-
     </script>
 </body>
 </html>
