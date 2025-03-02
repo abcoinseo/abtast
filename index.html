@@ -1,242 +1,256 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Full-Screen Face Lock (Simulated)</title>
-<style>
-body {
-  font-family: sans-serif;
-  margin: 0;
-  overflow: hidden; /* Prevent scrollbars */
-  background-color: #000; /* Dark background for pro look */
-  color: #fff;
-}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Camera App</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
 
-#camera-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-}
+        #camera-container {
+            position: relative;
+            width: 80%;
+            max-width: 600px; /* Adjust as needed */
+            margin-bottom: 20px;
+        }
 
-#camera-view {
-  width: 100%;  /* Full width */
-  height: auto; /* Maintain aspect ratio */
-  transform: scaleX(-1); /* Flip horizontally for "mirror" effect */
-  object-fit: cover; /* Cover the entire container */
-}
+        #camera-feed {
+            width: 100%;
+            display: block;
+            border-radius: 8px; /* Rounded corners */
+        }
 
-#overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
+        #captured-image {
+            width: 100%;
+            display: none; /* Initially hidden */
+            border-radius: 8px;
+        }
 
-#message {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  font-size: 1.5em;
-  color: #eee;
-}
+        #controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
 
-#locked-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.9);
-  color: #fff;
-  text-align: center;
-  padding-top: 50vh;
-  font-size: 2em;
-  display: none; /* Initially hidden */
-  z-index: 1000; /* Ensure it's on top */
-}
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
 
-.face-dot {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background-color: #00ff00; /* Green dots */
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-}
+        button:hover {
+            background-color: #3e8e41;
+        }
 
-#instructions {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  font-size: 1em;
-  color: #ccc;
-}
-</style>
+        #download-link {
+            display: none; /* Initially hidden */
+            margin-top: 10px;
+        }
+
+        /* "Pro" features - just basic styling for show */
+        #pro-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        #pro-controls input[type="range"] {
+            width: 100px;
+        }
+
+        #pro-controls label {
+            font-size: 14px;
+        }
+
+        #flash-button {
+            background-color: #FFC107;
+            color: black;
+        }
+
+        #flash-button:hover {
+            background-color: #FF9800;
+        }
+
+        .hidden {
+          display: none;
+        }
+
+    </style>
 </head>
 <body>
 
-<div id="camera-container">
-  <video id="camera-view" autoplay playsinline></video>
-  <canvas id="overlay"></canvas>
-</div>
+    <h1>Simple Camera App</h1>
 
-<div id="message">Scanning for face...</div>
+    <div id="camera-container">
+        <video id="camera-feed" autoplay playsinline></video>
+        <canvas id="camera-canvas" style="display: none;"></canvas>
+        <img id="captured-image" alt="Captured Image">
+    </div>
 
-<div id="locked-screen">
-  LOCKED! Face not recognized.
-</div>
+    <div id="controls">
+        <button id="start-camera">Start Camera</button>
+        <button id="take-picture" disabled>Take Picture</button>
+        <button id="retake-picture" class="hidden">Retake</button>
+    </div>
 
-<div id="instructions">Simulated: Face detection and storage are not real.</div>
+    <a id="download-link" download="captured_image.jpg">Download Image</a>
 
-<script>
-const cameraView = document.getElementById('camera-view');
-const overlayCanvas = document.getElementById('overlay');
-const overlayContext = overlayCanvas.getContext('2d');
-const messageElement = document.getElementById('message');
-const lockedScreen = document.getElementById('locked-screen');
-const cameraContainer = document.getElementById('camera-container');
+    <div id="pro-controls">
+        <div>
+            <label for="brightness">Brightness:</label>
+            <input type="range" id="brightness" min="0" max="2" step="0.1" value="1">
+        </div>
+        <div>
+            <label for="contrast">Contrast:</label>
+            <input type="range" id="contrast" min="0" max="2" step="0.1" value="1">
+        </div>
+        <button id="flash-button">Flash</button>
+    </div>
 
-let stream = null;
-let isLocked = true;
-let faceData = null; // Store "saved" face data
-let faceDots = []; // Array to hold face dots elements
+    <script>
+        const cameraFeed = document.getElementById('camera-feed');
+        const capturedImage = document.getElementById('captured-image');
+        const startCameraButton = document.getElementById('start-camera');
+        const takePictureButton = document.getElementById('take-picture');
+        const retakePictureButton = document.getElementById('retake-picture');
+        const downloadLink = document.getElementById('download-link');
+        const cameraCanvas = document.getElementById('camera-canvas');
+        const brightnessControl = document.getElementById('brightness');
+        const contrastControl = document.getElementById('contrast');
+        const flashButton = document.getElementById('flash-button');
 
-function startCamera() {
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }) // Force front camera
-      .then(function(s) {
-        stream = s;
-        cameraView.srcObject = stream;
+        let stream = null;
+        let imageCapture = null;
+        let flashEnabled = false;
 
-        cameraView.addEventListener('loadedmetadata', () => {
-          overlayCanvas.width = cameraView.videoWidth;
-          overlayCanvas.height = cameraView.videoHeight;
-          drawOverlay();
-        });
-      })
-      .catch(function(error) {
-        console.error('Error accessing camera:', error);
-        messageElement.textContent = "Error accessing camera. Check permissions.";
-      });
-  } else {
-    messageElement.textContent = "Camera not supported in this browser.";
-  }
-}
+        // Start camera function
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); //prefer back camera
+                cameraFeed.srcObject = stream;
+                takePictureButton.disabled = false;
+                startCameraButton.disabled = true;
 
-function drawOverlay() {
-  if (!stream) return;
+                // Attempt to access ImageCapture (for more advanced control)
+                try {
+                    const track = stream.getVideoTracks()[0];
+                    imageCapture = new ImageCapture(track);
+                    console.log("ImageCapture API available.");
+                } catch (error) {
+                    console.warn("ImageCapture API not available:", error);
+                    imageCapture = null;
+                }
 
-  overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
-  // Simulated face detection (replace with real face detection library)
-  let simulatedFace = null;
-  if (isLocked) {
-    simulatedFace = getSimulatedFaceData(); // Get random face location
-  } else {
-    simulatedFace = faceData; // Use the "saved" face data
-  }
-
-  if (simulatedFace) {
-      drawFaceDots(simulatedFace);  // Draw dots
-
-      // Check if face is close enough to saved face
-      if (!isLocked && areFacesSimilar(simulatedFace, faceData)) {
-        messageElement.textContent = "Face recognized!";
-        lockedScreen.style.display = 'none';
-
-        setTimeout(() => {
-          messageElement.textContent = "Scanning for face...";
-          isLocked = true;
-          lockedScreen.style.display = 'block';
-        }, 3000);
-      }
-  }
-  requestAnimationFrame(drawOverlay);
-}
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Unable to access camera. Please ensure permissions are granted.');
+            }
+        }
 
 
-function getSimulatedFaceData() {
-    // Generate a random face position (replace with real detection)
-    const x = Math.random() * (overlayCanvas.width - 100);
-    const y = Math.random() * (overlayCanvas.height - 100);
-    const width = 80 + Math.random() * 50;
-    const height = 100 + Math.random() * 50;
-    return { x: x, y: y, width: width, height: height };
-}
+        async function takePicture() {
+            if (!stream) {
+                alert('Camera not started.');
+                return;
+            }
 
-function drawFaceDots(face) {
-  // Clear existing dots
-  faceDots.forEach(dot => dot.remove());
-  faceDots = [];
+            try {
+                let imageBitmap;
 
-  // Draw dots around the face (more realistic than a simple rectangle)
-  const numDots = 20; // Adjust number of dots for density
-  for (let i = 0; i < numDots; i++) {
-    const angle = (i / numDots) * 2 * Math.PI;
-    const radius = Math.min(face.width, face.height) / 2;
-    const dotX = face.x + face.width / 2 + radius * Math.cos(angle);
-    const dotY = face.y + face.height / 2 + radius * Math.sin(angle);
-
-    const dot = document.createElement('div');
-    dot.classList.add('face-dot');
-    dot.style.left = dotX + 'px';
-    dot.style.top = dotY + 'px';
-    cameraContainer.appendChild(dot);
-    faceDots.push(dot);
-  }
-}
-
-function areFacesSimilar(face1, face2) {
-  // Basic check for face position similarity (replace with real comparison)
-  if (!face1 || !face2) return false;
-  const distance = Math.sqrt(Math.pow(face1.x - face2.x, 2) + Math.pow(face1.y - face2.y, 2));
-  return distance < 50; // Adjust threshold
-}
-
-
-function saveFaceData() {
-    // Get the current simulated face data (replace with real detection)
-    faceData = getSimulatedFaceData();
-    if (faceData) {
-      messageElement.textContent = "Face saved! Scanning...";
-      isLocked = true;
-      lockedScreen.style.display = 'block';
-
-      // Simulate relocking
-      setTimeout(() => {
-        messageElement.textContent = "Scanning for face...";
-      }, 3000);
-    } else {
-      messageElement.textContent = "No face detected to save.";
-    }
-}
-
-
-// Event listener to save the face when the user clicks/taps the screen
-cameraContainer.addEventListener('click', saveFaceData);
-cameraContainer.addEventListener('touchstart', saveFaceData); //For touch devices
+                if (imageCapture) {
+                    imageBitmap = await imageCapture.grabFrame();  // grabFrame is faster
+                } else {
+                    // Fallback if ImageCapture is not available
+                    cameraCanvas.width = cameraFeed.videoWidth;
+                    cameraCanvas.height = cameraFeed.videoHeight;
+                    const context = cameraCanvas.getContext('2d');
+                    context.drawImage(cameraFeed, 0, 0, cameraCanvas.width, cameraCanvas.height);
+                    imageBitmap = await createImageBitmap(cameraCanvas);
+                }
 
 
 
-// Initially lock the screen
-lockFace();
+                capturedImage.src = cameraCanvas.toDataURL('image/jpeg'); // Use canvas for consistent output
+                capturedImage.style.display = 'block';
+                cameraFeed.style.display = 'none';
+                takePictureButton.classList.add('hidden');
+                retakePictureButton.classList.remove('hidden');
 
-function lockFace() {
-  isLocked = true;
-  messageElement.textContent = "Face not recognized!";
-  lockedScreen.style.display = 'block';
-}
+                // Prepare download link
+                downloadLink.href = cameraCanvas.toDataURL('image/jpeg');
+                downloadLink.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error taking picture:', error);
+                alert('Error taking picture.  Check console for details.');
+            }
+        }
+
+        function retakePicture() {
+            capturedImage.style.display = 'none';
+            cameraFeed.style.display = 'block';
+            takePictureButton.classList.remove('hidden');
+            retakePictureButton.classList.add('hidden');
+            downloadLink.style.display = 'none';
+        }
 
 
-startCamera();
-</script>
+        function applyFilter() {
+            // Get current values
+            const brightness = brightnessControl.value;
+            const contrast = contrastControl.value;
+
+            // Apply filters directly to the video element.  Note:  This can be CPU intensive.  A canvas approach is generally better for performance.
+            cameraFeed.style.filter = `brightness(${brightness}) contrast(${contrast})`;  // Simple brightness/contrast.  More complex filters would require a canvas.
+        }
+
+        async function toggleFlash() {
+            if (!stream) return;
+
+            const track = stream.getVideoTracks()[0];
+            const capabilities = track.getCapabilities();
+
+            if (!('torch' in capabilities)) {
+                alert('Flash/Torch not supported on this device.');
+                return;
+            }
+
+            flashEnabled = !flashEnabled;
+
+            try {
+                await track.applyConstraints({ advanced: [{ torch: flashEnabled }] });
+                flashButton.textContent = flashEnabled ? 'Flash Off' : 'Flash On';
+            } catch (error) {
+                console.error('Error toggling flash:', error);
+                alert('Error toggling flash.  Make sure camera permissions are granted.');
+            }
+
+        }
+
+
+        startCameraButton.addEventListener('click', startCamera);
+        takePictureButton.addEventListener('click', takePicture);
+        retakePictureButton.addEventListener('click', retakePicture);
+
+        brightnessControl.addEventListener('input', applyFilter);
+        contrastControl.addEventListener('input', applyFilter);
+        flashButton.addEventListener('click', toggleFlash);
+
+    </script>
 </body>
 </html>
