@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motion Detector Pro</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        #videoContainer {
+            width: 640px;
+            height: 480px;
+            position: relative; /* For overlaying detection area */
+            margin-bottom: 20px;
+        }
+
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            background-color: #000; /* Default background if video isn't loaded */
+        }
+
+        #detectionArea {
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            width: 80%;
+            height: 80%;
+            border: 2px dashed rgba(255, 0, 0, 0.5); /* Red dashed border */
+            pointer-events: none; /* Allow clicks through to the video */
+        }
+
+        #detectionAreaIndicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 0, 0, 0); /* Initially transparent */
+            transition: background-color 0.2s ease-in-out;
+            pointer-events: none;
+        }
+
+
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #3e8e41;
+        }
+
+        #sensitivitySlider {
+            width: 200px;
+        }
+
+        #status {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        #log {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            width: 600px;
+            height: 100px;
+            overflow-y: scroll;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        /* "Pro" Styling -  Subtle and Clean */
+        body {
+            background-color: #f4f4f4; /* Lighter background */
+        }
+
+        button {
+            background-color: #007bff; /* Professional Blue */
+            border: 1px solid #007bff;
+            color: white;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+
+        #status {
+            color: #28a745; /* Success Green */
+        }
+
+        #log {
+            background-color: #fff; /* White Log Background */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Motion Detector Pro</h1>
+
+    <div id="videoContainer">
+        <video id="videoElement" autoplay muted></video>
+        <div id="detectionArea">
+            <div id="detectionAreaIndicator"></div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="startStopButton">Start Detection</button>
+        <label for="sensitivitySlider">Sensitivity:</label>
+        <input type="range" id="sensitivitySlider" min="1" max="100" value="20">
+    </div>
+
+    <div id="status">Status: Ready</div>
+    <div id="log"></div>
+
+
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const startStopButton = document.getElementById('startStopButton');
+        const sensitivitySlider = document.getElementById('sensitivitySlider');
+        const statusElement = document.getElementById('status');
+        const logElement = document.getElementById('log');
+        const detectionAreaIndicator = document.getElementById('detectionAreaIndicator');
+
+        let streaming = false;
+        let rafId; // RequestAnimationFrame ID
+        let previousFrameData;
+        let isDetecting = false;
+
+        const width = 640;
+        const height = 480;
+        let sensitivity = parseInt(sensitivitySlider.value);  // Get initial sensitivity
+
+        // Configuration - Can be tweaked for performance and accuracy
+        const motionThreshold = 50; // Higher means less sensitive
+        const areaThreshold = 0.01; // Percentage of detection area with motion to trigger
+
+        // Utility functions
+        function log(message) {
+            logElement.innerHTML = new Date().toLocaleTimeString() + ': ' + message + '<br>' + logElement.innerHTML;
+        }
+
+        function initCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { width: width, height: height }, audio: false })
+                .then(stream => {
+                    videoElement.srcObject = stream;
+                    videoElement.play();
+                    streaming = true;
+                    statusElement.textContent = 'Camera Ready';
+                })
+                .catch(err => {
+                    console.error("An error occurred: " + err);
+                    statusElement.textContent = 'Error: ' + err.message;
+                    log(err.message);
+                });
+        }
+
+        function detectMotion() {
+            if (!streaming || !isDetecting) return;
+
+            rafId = requestAnimationFrame(detectMotion);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            ctx.drawImage(videoElement, 0, 0, width, height);
+            const currentFrameData = ctx.getImageData(0, 0, width, height).data;
+
+            if (previousFrameData) {
+                let motionPixels = 0;
+                const detectionStartX = Math.floor(width * 0.1);  // 10% from left
+                const detectionStartY = Math.floor(height * 0.1); // 10% from top
+                const detectionWidth = Math.floor(width * 0.8);   // 80% width
+                const detectionHeight = Math.floor(height * 0.8);  // 80% height
+
+                for (let y = detectionStartY; y < detectionStartY + detectionHeight; y++) {
+                    for (let x = detectionStartX; x < detectionStartX + detectionWidth; x++) {
+                        const i = (y * width + x) * 4;  // RGBA
+                        const r1 = previousFrameData[i];
+                        const g1 = previousFrameData[i + 1];
+                        const b1 = previousFrameData[i + 2];
+
+                        const r2 = currentFrameData[i];
+                        const g2 = currentFrameData[i + 1];
+                        const b2 = currentFrameData[i + 2];
+
+                        const diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+
+                        if (diff > sensitivity) {
+                            motionPixels++;
+                        }
+                    }
+                }
+
+                const totalPixelsInArea = detectionWidth * detectionHeight;
+                const motionPercentage = motionPixels / totalPixelsInArea;
+
+                if (motionPercentage > areaThreshold) {
+                    log('Motion Detected!');
+                    detectionAreaIndicator.style.backgroundColor = 'rgba(255, 0, 0, 0.5)'; // Red highlight
+                    setTimeout(() => {
+                        detectionAreaIndicator.style.backgroundColor = 'rgba(255, 0, 0, 0)'; // Back to transparent
+                    }, 300); // Short highlight duration
+                }
+            }
+
+            previousFrameData = currentFrameData;
+        }
+
+        function startDetection() {
+            if(!streaming) {
+                alert("Camera not ready.  Please allow camera access.");
+                return;
+            }
+            isDetecting = true;
+            startStopButton.textContent = 'Stop Detection';
+            statusElement.textContent = 'Detecting Motion...';
+            log('Detection started.');
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoElement, 0, 0, width, height);
+            previousFrameData = ctx.getImageData(0, 0, width, height).data; // Initial frame
+            detectMotion();
+        }
+
+        function stopDetection() {
+            isDetecting = false;
+            startStopButton.textContent = 'Start Detection';
+            statusElement.textContent = 'Ready';
+            log('Detection stopped.');
+            cancelAnimationFrame(rafId); // Stop animation frame
+            previousFrameData = null; // Clear previous frame
+        }
+
+        // Event Listeners
+        startStopButton.addEventListener('click', () => {
+            if (isDetecting) {
+                stopDetection();
+            } else {
+                startDetection();
+            }
+        });
+
+        sensitivitySlider.addEventListener('input', () => {
+            sensitivity = parseInt(sensitivitySlider.value);
+        });
+
+
+        //On Load
+        videoElement.addEventListener('loadedmetadata', () => {
+            videoElement.width = width;
+            videoElement.height = height;
+        });
+
+
+        initCamera();
+
+
+    </script>
+</body>
+</html>
