@@ -1,47 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Pro Voice-Only Walkie-Talkie</title>
+<title>Pro Walkie-Talkie</title>
 <style>
 body {
-  font-family: 'Arial', sans-serif;
+  font-family: sans-serif;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 20px;
-  background-color: #f0f0f0;
-}
-
-h1 {
-  color: #333;
-  margin-bottom: 20px;
 }
 
 #status {
   margin-top: 10px;
   font-weight: bold;
-  color: #555;
 }
 
 #messages {
   margin-top: 20px;
-  width: 80%;
-  max-width: 600px;
+  width: 300px;
 }
 
 .message {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
-  background-color: #fff;
-  border-radius: 5px;
-  margin-bottom: 5px;
-  word-wrap: break-word; /* For long messages */
+  padding: 8px;
+  border-bottom: 1px solid #eee;
 }
 </style>
 </head>
 <body>
 
-<h1>Pro Voice-Only Walkie-Talkie</h1>
+<h1>Pro Walkie-Talkie</h1>
 
 <div id="status">Initializing...</div>
 <div id="messages"></div>
@@ -53,14 +41,14 @@ h1 {
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
-  apiKey: "AIzaSyBQMke0SOMIq0rod6vOm4jrFJ4cExfJPNE",
-  authDomain: "ab-studio-4c309.firebaseapp.com",
-  databaseURL: "https://ab-studio-4c309-default-rtdb.firebaseio.com",
-  projectId: "ab-studio-4c309",
-  storageBucket: "ab-studio-4c309.firebasestorage.app",
-  messagingSenderId: "290321392308",
-  appId: "1:290321392308:web:eed8f4bda17a51944eade1"
-};
+    apiKey: "YOUR_API_KEY", //REPLACE
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com", //REPLACE
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com", //REPLACE
+    projectId: "YOUR_PROJECT_ID", //REPLACE
+    storageBucket: "YOUR_PROJECT_ID.appspot.com", //REPLACE
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID", //REPLACE
+    appId: "YOUR_APP_ID" //REPLACE
+  };
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
@@ -72,103 +60,58 @@ h1 {
 
   let speechRecognition;
   let isListening = false;
-  let clientId = Math.random().toString(36).substring(2, 15);
-
-  // Function to report errors to UI
-  function reportError(message) {
-    console.error(message);
-    statusDiv.textContent = `Error: ${message}`;
-  }
 
   // Initialize Speech Recognition
   function initializeSpeechRecognition() {
     window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!window.SpeechRecognition) {
-      reportError("Speech recognition not supported in this browser.");
+      statusDiv.textContent = "Speech recognition not supported in this browser.";
       return;
     }
 
     speechRecognition = new window.SpeechRecognition();
-    speechRecognition.continuous = true;
-    speechRecognition.interimResults = false;
-      speechRecognition.maxAlternatives = 5 // add more alternative for recognize close languages
+    speechRecognition.continuous = true;  // Keep listening
+    speechRecognition.interimResults = false; // Only final results
+
     speechRecognition.onstart = () => {
       isListening = true;
       statusDiv.textContent = "Listening...";
     };
 
     speechRecognition.onresult = (event) => {
-      let bestTranscript = "";
-      let bestConfidence = 0;
+      const transcript = Array.from(event.results)
+        .map(result => result[0])
+        .map(result => result.transcript)
+        .join('');
 
-      for (let i = 0; i < event.results.length; i++) {
-          const result = event.results[i];
-          for (let j = 0; j < result.length; j++) {
-              const alternative = result[j];
-              if (alternative.confidence > bestConfidence) {
-                  bestTranscript = alternative.transcript;
-                  bestConfidence = alternative.confidence;
-              }
-          }
-      }
-
-
-      if (bestTranscript) {
-        // Send the transcript to Firebase
-        push(messagesRef, {
-          text: bestTranscript,
-          timestamp: Date.now(),
-          clientId: clientId
-        })
-          .catch(error => {
-            reportError(`Error sending voice message: ${error}`);
-          });
-      }
+      // Send the transcript to Firebase
+      push(messagesRef, { text: transcript, timestamp: Date.now() })
+        .catch(error => {
+          console.error("Error sending voice message:", error);
+          statusDiv.textContent = "Error sending message.";
+        });
     };
 
     speechRecognition.onerror = (event) => {
-      reportError(`Speech recognition error: ${event.error}`);
+      console.error("Speech recognition error:", event.error);
+      statusDiv.textContent = `Speech recognition error: ${event.error}`;
     };
 
     speechRecognition.onend = () => {
       isListening = false;
       statusDiv.textContent = "Idle. Restarting...";
+      // Restart recognition automatically if it ends unexpectedly
       setTimeout(() => {
           if (!isListening) {
               startListening();
           }
-      }, 1000);
+      }, 1000); // Restart after 1 second
     };
-
-    // Set initial languages. Try Bangla and English
-    speechRecognition.lang = 'bn-BD'; // Attempt Bangla first
-
   }
 
-  // Function to speak text (with language support and "real voice" attempt)
- function speak(text, lang) {
+  // Function to speak text
+  function speak(text) {
     const utterance = new SpeechSynthesisUtterance(text);
-
-    // Set language - default to Bangla if undetermined
-    utterance.lang = lang || 'bn-BD';
-
-
-    // Attempt "real voice" (platform-dependent, may not work well)
-    const voices = window.speechSynthesis.getVoices();
-    let bestVoice = null;
-
-    if (voices && voices.length > 0) {
-      if (lang === 'bn-BD'){
-          bestVoice = voices.find(voice => voice.lang === 'bn-BD');
-      } else {
-          bestVoice = voices.find(voice => voice.lang === 'en-US');
-      }
-
-    }
-    if (bestVoice) {
-      utterance.voice = bestVoice;
-    }
-
     window.speechSynthesis.speak(utterance);
   }
 
@@ -178,7 +121,8 @@ h1 {
           try {
               speechRecognition.start();
           } catch (error) {
-              reportError(`Error starting speech recognition: ${error}`);
+              console.error("Error starting speech recognition:", error);
+              statusDiv.textContent = "Error starting recognition.";
               setTimeout(() => {startListening()}, 5000)
           }
       }
@@ -194,26 +138,30 @@ h1 {
         messageElement.textContent = message.text;
         messagesDiv.appendChild(messageElement);
 
-        // Speak the message ONLY if it wasn't sent by this client
-        if (message.clientId !== clientId) {
-          speak(message.text,  'bn-BD'); // or EN depend on test.
+        // Speak the message ONLY if it wasn't spoken by this client
+        // (This is the key to prevent hearing yourself)
+        if (!message.isFromThisClient) {  // Add this flag when sending.
+          speak(message.text);
         }
 
-        // Delete the message after speaking
+        // Optional: Delete the message after speaking
         remove(ref(database, `messages/${key}`))
           .catch(error => {
-            reportError(`Error deleting message: ${error}`);
+            console.error("Error deleting message:", error);
           });
       });
     }
-    messagesDiv.innerHTML = ''; //Clear messages after reading
+
+     //clear messages after reading
+    messagesDiv.innerHTML = '';
+
   });
 
   // Initialize everything when the page loads
   window.addEventListener('load', () => {
     initializeSpeechRecognition();
     if (speechRecognition) {
-      startListening();
+      startListening(); // Start listening as soon as the page loads
     }
   });
 </script>
