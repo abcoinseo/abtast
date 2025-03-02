@@ -1,511 +1,191 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motion Detector Pro - Smart Zones</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background-color: #f4f4f4;
-        }
+<title>Face Lock (Simulated)</title>
+<style>
+body {
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+  background-color: #f0f0f0;
+}
 
-        #videoContainer {
-            width: 640px;
-            height: 480px;
-            position: relative;
-            margin-bottom: 20px;
-        }
+#camera-container {
+  position: relative;
+  width: 320px; /* Adjust for desired camera view size */
+  height: 240px; /* Adjust for desired camera view size */
+  border: 1px solid #ccc;
+  margin-bottom: 20px;
+  overflow: hidden; /* Hide overflow for a clean border */
+}
 
-        #videoElement {
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-        }
+#camera-view {
+  width: 100%;
+  height: 100%;
+}
 
-        .detectionArea {
-            position: absolute;
-            border: 2px dashed rgba(255, 0, 0, 0.5);
-            pointer-events: none;
-        }
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Allows clicks to pass through to the camera */
+}
 
-        .detectionAreaIndicator {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 0, 0, 0);
-            transition: background-color 0.2s ease-in-out;
-            pointer-events: none;
-        }
+#message {
+  font-size: 1.2em;
+  margin-bottom: 10px;
+  color: #333;
+}
 
-        #detectionArea1 {
-            top: 10%;
-            left: 10%;
-            width: 25%;
-            height: 25%;
-        }
+#unlock-button {
+  padding: 10px 20px;
+  font-size: 1em;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
 
-        #detectionArea2 {
-            top: 40%;
-            left: 40%;
-            width: 25%;
-            height: 25%;
-        }
+#unlock-button:hover {
+  background-color: #3e8e41;
+}
 
-        #detectionArea3 {
-            top: 70%;
-            left: 70%;
-            width: 25%;
-            height: 25%;
-        }
-
-        #controls {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .areaControls {
-            display: flex;
-            flex-direction: column;  /* Display area controls vertically */
-            align-items: center;
-            gap: 5px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc; /* Add a border to the area controls section */
-            padding: 10px;
-            border-radius: 5px;
-        }
-
-
-        button {
-            padding: 10px 20px;
-            background-color: #007bff;
-            border: 1px solid #007bff;
-            color: white;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-            border-color: #0056b3;
-        }
-
-        #sensitivitySlider {
-            width: 200px;
-        }
-
-        #status {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #28a745;
-        }
-
-        #log {
-            margin-top: 20px;
-            border: 1px solid #ccc;
-            padding: 10px;
-            width: 600px;
-            height: 100px;
-            overflow-y: scroll;
-            font-family: monospace;
-            font-size: 0.9em;
-            background-color: #fff;
-        }
-
-        .areaToggleButton {
-            padding: 5px 10px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        .areaToggleButton.active {
-            background-color: #28a745;
-        }
-
-        .applianceIndicator {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            margin-left: 5px;
-            display: inline-block; /* So they are on the same line as the labels*/
-        }
-
-        .lightIndicator {
-            background-color: gray;
-        }
-
-        .lightIndicator.on {
-            background-color: yellow;
-            box-shadow: 0 0 10px yellow;
-        }
-
-        .fanIndicator {
-            background-color: gray;
-        }
-
-        .fanIndicator.on {
-            background-color: lightblue;
-            box-shadow: 0 0 10px lightblue;
-        }
-        .deviceButton {
-            padding: 5px 10px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 2px;
-        }
-
-        .deviceButton.on {
-            background-color: #28a745;
-        }
-
-
-    </style>
+#locked-screen {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  text-align: center;
+  padding-top: 50vh;
+  font-size: 2em;
+}
+</style>
 </head>
 <body>
 
-    <h1>Motion Detector Pro - Smart Zones</h1>
+<div id="camera-container">
+  <video id="camera-view" autoplay playsinline></video>
+  <canvas id="overlay"></canvas>
+</div>
 
-    <div id="videoContainer">
-        <video id="videoElement" autoplay muted></video>
-        <div id="detectionArea1" class="detectionArea">
-            <div class="detectionAreaIndicator"></div>
-        </div>
-        <div id="detectionArea2" class="detectionArea">
-            <div class="detectionAreaIndicator"></div>
-        </div>
-        <div id="detectionArea3" class="detectionArea">
-            <div class="detectionAreaIndicator"></div>
-        </div>
-    </div>
+<div id="message">Scanning for face...</div>
+<button id="unlock-button">Unlock (Simulated)</button>
 
-    <div id="controls">
-        <button id="startStopButton">Start Detection</button>
-        <label for="sensitivitySlider">Sensitivity:</label>
-        <input type="range" id="sensitivitySlider" min="1" max="100" value="20">
+<div id="locked-screen">
+  LOCKED! Face not recognized.
+</div>
 
-        <div class="areaControls">
-            <label>Area 1: Light <span id="light1Indicator" class="applianceIndicator lightIndicator"></span></label>
-            <div>
-                <button id="light1OnButton" class="deviceButton">Light On</button>
-                <button id="light1OffButton" class="deviceButton">Light Off</button>
-            </div>
-            <label> Fan <span id="fan1Indicator" class="applianceIndicator fanIndicator"></span></label>
-            <div>
-                 <button id="fan1OnButton" class="deviceButton">Fan On</button>
-                <button id="fan1OffButton" class="deviceButton">Fan Off</button>
-            </div>
-        </div>
+<script>
+const cameraView = document.getElementById('camera-view');
+const overlayCanvas = document.getElementById('overlay');
+const overlayContext = overlayCanvas.getContext('2d');
+const messageElement = document.getElementById('message');
+const unlockButton = document.getElementById('unlock-button');
+const lockedScreen = document.getElementById('locked-screen');
 
-        <div class="areaControls">
-            <label>Area 2: Light <span id="light2Indicator" class="applianceIndicator lightIndicator"></span></label>
-             <div>
-                <button id="light2OnButton" class="deviceButton">Light On</button>
-                <button id="light2OffButton" class="deviceButton">Light Off</button>
-            </div>
-            <label> Fan <span id="fan2Indicator" class="applianceIndicator fanIndicator"></span></label>
-              <div>
-                 <button id="fan2OnButton" class="deviceButton">Fan On</button>
-                <button id="fan2OffButton" class="deviceButton">Fan Off</button>
-            </div>
-        </div>
+let stream = null;
+let isLocked = true;  // Start locked
 
-        <div class="areaControls">
-            <label>Area 3: Light <span id="light3Indicator" class="applianceIndicator lightIndicator"></span></label>
-              <div>
-                <button id="light3OnButton" class="deviceButton">Light On</button>
-                <button id="light3OffButton" class="deviceButton">Light Off</button>
-            </div>
-            <label> Fan <span id="fan3Indicator" class="applianceIndicator fanIndicator"></span></label>
-              <div>
-                 <button id="fan3OnButton" class="deviceButton">Fan On</button>
-                <button id="fan3OffButton" class="deviceButton">Fan Off</button>
-            </div>
-        </div>
-
-    </div>
-
-    <div id="status">Status: Ready</div>
-    <div id="log"></div>
-
-    <script>
-        const videoElement = document.getElementById('videoElement');
-        const startStopButton = document.getElementById('startStopButton');
-        const sensitivitySlider = document.getElementById('sensitivitySlider');
-        const statusElement = document.getElementById('status');
-        const logElement = document.getElementById('log');
-
-        // Area 1
-        const light1OnButton = document.getElementById('light1OnButton');
-        const light1OffButton = document.getElementById('light1OffButton');
-        const light1Indicator = document.getElementById('light1Indicator');
-        const fan1OnButton = document.getElementById('fan1OnButton');
-        const fan1OffButton = document.getElementById('fan1OffButton');
-        const fan1Indicator = document.getElementById('fan1Indicator');
-
-        // Area 2
-        const light2OnButton = document.getElementById('light2OnButton');
-        const light2OffButton = document.getElementById('light2OffButton');
-        const light2Indicator = document.getElementById('light2Indicator');
-        const fan2OnButton = document.getElementById('fan2OnButton');
-        const fan2OffButton = document.getElementById('fan2OffButton');
-        const fan2Indicator = document.getElementById('fan2Indicator');
-
-        // Area 3
-        const light3OnButton = document.getElementById('light3OnButton');
-        const light3OffButton = document.getElementById('light3OffButton');
-        const light3Indicator = document.getElementById('light3Indicator');
-        const fan3OnButton = document.getElementById('fan3OnButton');
-        const fan3OffButton = document.getElementById('fan3OffButton');
-        const fan3Indicator = document.getElementById('fan3Indicator');
-
-        const detectionArea1 = document.getElementById('detectionArea1');
-        const detectionArea2 = document.getElementById('detectionArea2');
-        const detectionArea3 = document.getElementById('detectionArea3');
+// Simulate face data (replace with actual face detection logic)
+const simulatedFaceData = {
+    x: 100,
+    y: 80,
+    width: 120,
+    height: 150,
+};
 
 
-        let streaming = false;
-        let rafId;
-        let previousFrameData;
-        let isDetecting = false;
+function startCamera() {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(s) {
+                stream = s;
+                cameraView.srcObject = stream;
 
-
-        const width = 640;
-        const height = 480;
-        let sensitivity = parseInt(sensitivitySlider.value);
-        const motionThreshold = 50;
-        const areaThreshold = 0.01;
-
-        // Device State Variables (Initially off)
-        let light1On = false;
-        let light2On = false;
-        let light3On = false;
-        let fan1On = false;
-        let fan2On = false;
-        let fan3On = false;
-
-
-        function log(message) {
-            logElement.innerHTML = new Date().toLocaleTimeString() + ': ' + message + '<br>' + logElement.innerHTML;
-        }
-
-        function initCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { width: width, height: height }, audio: false })
-                .then(stream => {
-                    videoElement.srcObject = stream;
-                    videoElement.play();
-                    streaming = true;
-                    statusElement.textContent = 'Camera Ready';
-                })
-                .catch(err => {
-                    console.error("An error occurred: " + err);
-                    statusElement.textContent = 'Error: ' + err.message;
-                    log(err.message);
+                cameraView.addEventListener('loadedmetadata', () => {
+                    overlayCanvas.width = cameraView.videoWidth;
+                    overlayCanvas.height = cameraView.videoHeight;
+                    drawOverlay(); // Start drawing the overlay immediately
                 });
-        }
-
-         function detectMotion() {
-            if (!streaming || !isDetecting) return;
-
-            rafId = requestAnimationFrame(detectMotion);
-
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-
-            ctx.drawImage(videoElement, 0, 0, width, height);
-            const currentFrameData = ctx.getImageData(0, 0, width, height).data;
-
-            if (previousFrameData) {
-                detectMotionInArea(currentFrameData, 'detectionArea1');
-                detectMotionInArea(currentFrameData, 'detectionArea2');
-                detectMotionInArea(currentFrameData, 'detectionArea3');
-            }
-
-            previousFrameData = currentFrameData;
-        }
 
 
+            })
+            .catch(function(error) {
+                console.error('Error accessing camera:', error);
+                messageElement.textContent = "Error accessing camera.  Check permissions.";
+            });
+    } else {
+        messageElement.textContent = "Camera not supported in this browser.";
+    }
+}
 
-        function detectMotionInArea(currentFrameData, areaId) {
+function drawOverlay() {
+    if (!stream) return; // Make sure camera is ready
 
+    overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-            const areaElement = document.getElementById(areaId);
-            const indicator = areaElement.querySelector('.detectionAreaIndicator');
-            const rect = areaElement.getBoundingClientRect();
+    // Simulate drawing a rectangle around a detected face
+    if (simulatedFaceData) {
+        overlayContext.strokeStyle = 'red';
+        overlayContext.lineWidth = 3;
+        overlayContext.strokeRect(simulatedFaceData.x, simulatedFaceData.y, simulatedFaceData.width, simulatedFaceData.height);
+    }
 
-            const detectionStartX = Math.floor(rect.left - videoElement.getBoundingClientRect().left);
-            const detectionStartY = Math.floor(rect.top - videoElement.getBoundingClientRect().top);
-            const detectionWidth = Math.floor(rect.width);
-            const detectionHeight = Math.floor(rect.height);
-
-             let motionPixels = 0;
-
-            for (let y = detectionStartY; y < detectionStartY + detectionHeight; y++) {
-                for (let x = detectionStartX; x < detectionStartX + detectionWidth; x++) {
-                     if (x >= 0 && x < width && y >= 0 && y < height) {  // bounds checking
-                        const i = (y * width + x) * 4;
-                        const r1 = previousFrameData[i];
-                        const g1 = previousFrameData[i + 1];
-                        const b1 = previousFrameData[i + 2];
-
-                        const r2 = currentFrameData[i];
-                        const g2 = currentFrameData[i + 1];
-                        const b2 = currentFrameData[i + 2];
-
-                        const diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
-
-                        if (diff > sensitivity) {
-                            motionPixels++;
-                        }
-                    }
-                }
-            }
-
-            const totalPixelsInArea = detectionWidth * detectionHeight;
-            const motionPercentage = motionPixels / totalPixelsInArea;
-
-            if (motionPercentage > areaThreshold) {
-                log(`Motion Detected in ${areaId}!`);
-                indicator.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
-                setTimeout(() => {
-                    indicator.style.backgroundColor = 'rgba(255, 0, 0, 0)';
-                }, 300);
-            }
-        }
+    requestAnimationFrame(drawOverlay); // Keep drawing the overlay
+}
 
 
-        function startDetection() {
-            if(!streaming) {
-                alert("Camera not ready. Please allow camera access.");
-                return;
-            }
-            isDetecting = true;
-            startStopButton.textContent = 'Stop Detection';
-            statusElement.textContent = 'Detecting Motion...';
-            log('Detection started.');
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(videoElement, 0, 0, width, height);
-            previousFrameData = ctx.getImageData(0, 0, width, height).data;
-            detectMotion();
-        }
+function unlockFace() {
+  // This is a SIMULATION.  In a real application, you'd:
+  // 1. Analyze the face data from the camera.
+  // 2. Compare it to a known face.
+  // 3. If it matches closely enough, unlock.
 
-        function stopDetection() {
-            isDetecting = false;
-            startStopButton.textContent = 'Start Detection';
-            statusElement.textContent = 'Ready';
-            log('Detection stopped.');
-            cancelAnimationFrame(rafId);
-            previousFrameData = null;
-        }
+  // For now, just simulate a successful unlock.
+  isLocked = false;
+  messageElement.textContent = "Face recognized!";
+  lockedScreen.style.display = 'none';
+  setTimeout(() => {
+     messageElement.textContent = "Scanning for face..."; // Revert after a delay
+     isLocked = true; //Simulate relocking after a short time
+     lockedScreen.style.display = 'block';
+
+  }, 3000); // Simulate relocking after 3 seconds.
 
 
-         function toggleAppliance(areaNumber, applianceType, onButton, offButton, indicatorElement) {
-            let isOn;
-            let stateVariable;
+}
 
-            switch (areaNumber) {
-                case 1:
-                    if (applianceType === 'light') {
-                        light1On = !light1On;
-                        isOn = light1On;
-                        stateVariable = 'light1On';
-                    } else if (applianceType === 'fan') {
-                        fan1On = !fan1On;
-                        isOn = fan1On;
-                        stateVariable = 'fan1On';
-                    }
-                    break;
-                case 2:
-                    if (applianceType === 'light') {
-                        light2On = !light2On;
-                        isOn = light2On;
-                        stateVariable = 'light2On';
-                    } else if (applianceType === 'fan') {
-                        fan2On = !fan2On;
-                        isOn = fan2On;
-                        stateVariable = 'fan2On';
-                    }
-                    break;
-                case 3:
-                    if (applianceType === 'light') {
-                        light3On = !light3On;
-                        isOn = light3On;
-                        stateVariable = 'light3On';
-                    } else if (applianceType === 'fan') {
-                        fan3On = !fan3On;
-                        isOn = fan3On;
-                        stateVariable = 'fan3On';
-                    }
-                    break;
-                default:
-                    console.error('Invalid area number');
-                    return;
-            }
-            const applianceName = applianceType.charAt(0).toUpperCase() + applianceType.slice(1); // Light or Fan
-            const action = isOn ? 'ON' : 'OFF';
-            log(`${applianceName} in Area ${areaNumber} turned ${action}`);
-            indicatorElement.classList.toggle('on', isOn);
-        }
+function lockFace() {
+    isLocked = true;
+    messageElement.textContent = "Face not recognized!";
+    lockedScreen.style.display = 'block';
+}
 
 
-        startStopButton.addEventListener('click', () => {
-            if (isDetecting) {
-                stopDetection();
-            } else {
-                startDetection();
-            }
-        });
-
-        sensitivitySlider.addEventListener('input', () => {
-            sensitivity = parseInt(sensitivitySlider.value);
-        });
-
-        videoElement.addEventListener('loadedmetadata', () => {
-            videoElement.width = width;
-            videoElement.height = height;
-        });
+unlockButton.addEventListener('click', () => {
+  unlockFace();
+});
 
 
-        // Event listeners for Area 1
-        light1OnButton.addEventListener('click', () => toggleAppliance(1, 'light', light1OnButton, light1OffButton, light1Indicator));
-        light1OffButton.addEventListener('click', () => toggleAppliance(1, 'light', light1OnButton, light1OffButton, light1Indicator));
-        fan1OnButton.addEventListener('click', () => toggleAppliance(1, 'fan', fan1OnButton, fan1OffButton, fan1Indicator));
-        fan1OffButton.addEventListener('click', () => toggleAppliance(1, 'fan', fan1OnButton, fan1OffButton, fan1Indicator));
+// Initially lock the screen
+lockFace();
 
-        // Event listeners for Area 2
-        light2OnButton.addEventListener('click', () => toggleAppliance(2, 'light', light2OnButton, light2OffButton, light2Indicator));
-        light2OffButton.addEventListener('click', () => toggleAppliance(2, 'light', light2OnButton, light2OffButton, light2Indicator));
-        fan2OnButton.addEventListener('click', () => toggleAppliance(2, 'fan', fan2OnButton, fan2OffButton, fan2Indicator));
-        fan2OffButton.addEventListener('click', () => toggleAppliance(2, 'fan', fan2OnButton, fan2OffButton, fan2Indicator));
+//Start the camera
+startCamera();
 
-        // Event listeners for Area 3
-        light3OnButton.addEventListener('click', () => toggleAppliance(3, 'light', light3OnButton, light3OffButton, light3Indicator));
-        light3OffButton.addEventListener('click', () => toggleAppliance(3, 'light', light3OnButton, light3OffButton, light3Indicator));
-        fan3OnButton.addEventListener('click', () => toggleAppliance(3, 'fan', fan3OnButton, fan3OffButton, fan3Indicator));
-        fan3OffButton.addEventListener('click', () => toggleAppliance(3, 'fan', fan3OnButton, fan3OffButton, fan3Indicator));
 
-        initCamera();
-    </script>
+</script>
+
 </body>
 </html>
