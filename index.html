@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motion Detector Pro - 3 Target Areas</title>
+    <title>Motion Detector Pro - 3 Smart Areas</title>
     <style>
         body {
             font-family: sans-serif;
@@ -69,7 +69,7 @@
 
         #controls {
             display: flex;
-            flex-direction: column; /* Stack controls vertically */
+            flex-direction: column;
             align-items: center;
             gap: 10px;
             margin-bottom: 20px;
@@ -77,7 +77,7 @@
 
         .areaControls {
             display: flex;
-            align-items: center; /* Align items in a row */
+            align-items: center;
             gap: 5px;
         }
 
@@ -127,13 +127,27 @@
         }
 
         .areaToggleButton.active {
-            background-color: #28a745; /* Green when active */
+            background-color: #28a745;
+        }
+
+        #lightIndicator {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: gray;
+            margin-top: 20px;
+            transition: background-color 0.3s ease; /* Smooth transition */
+        }
+
+        #lightIndicator.on {
+            background-color: yellow; /* Light is ON */
+            box-shadow: 0 0 20px yellow; /* Glow effect */
         }
     </style>
 </head>
 <body>
 
-    <h1>Motion Detector Pro - 3 Target Areas</h1>
+    <h1>Motion Detector Pro - 3 Smart Areas</h1>
 
     <div id="videoContainer">
         <video id="videoElement" autoplay muted></video>
@@ -171,6 +185,8 @@
     <div id="status">Status: Ready</div>
     <div id="log"></div>
 
+    <div id="lightIndicator"></div>
+
     <script>
         const videoElement = document.getElementById('videoElement');
         const startStopButton = document.getElementById('startStopButton');
@@ -185,6 +201,8 @@
         const detectionArea1 = document.getElementById('detectionArea1');
         const detectionArea2 = document.getElementById('detectionArea2');
         const detectionArea3 = document.getElementById('detectionArea3');
+
+        const lightIndicator = document.getElementById('lightIndicator');
 
         let streaming = false;
         let rafId;
@@ -201,6 +219,7 @@
         const motionThreshold = 50;
         const areaThreshold = 0.01;
 
+        let lightOn = false;  // Track light state
 
         function log(message) {
             logElement.innerHTML = new Date().toLocaleTimeString() + ': ' + message + '<br>' + logElement.innerHTML;
@@ -235,16 +254,21 @@
             const currentFrameData = ctx.getImageData(0, 0, width, height).data;
 
             if (previousFrameData) {
-                detectMotionInArea(currentFrameData, 'detectionArea1', area1Active);
-                detectMotionInArea(currentFrameData, 'detectionArea2', area2Active);
-                detectMotionInArea(currentFrameData, 'detectionArea3', area3Active);
+                const area1Motion = detectMotionInArea(currentFrameData, 'detectionArea1', area1Active);
+                const area2Motion = detectMotionInArea(currentFrameData, 'detectionArea2', area2Active);
+                const area3Motion = detectMotionInArea(currentFrameData, 'detectionArea3', area3Active);
+
+                //Turn on light if any area detects motion, and the light is not already on
+                if ((area1Motion || area2Motion || area3Motion) && !lightOn) {
+                    turnOnLight();
+                }
             }
 
             previousFrameData = currentFrameData;
         }
 
         function detectMotionInArea(currentFrameData, areaId, isActive) {
-            if (!isActive) return;
+            if (!isActive) return false;
 
             const areaElement = document.getElementById(areaId);
             const indicator = areaElement.querySelector('.detectionAreaIndicator');
@@ -255,11 +279,11 @@
             const detectionWidth = Math.floor(rect.width);
             const detectionHeight = Math.floor(rect.height);
 
-             let motionPixels = 0;
+            let motionPixels = 0;
 
             for (let y = detectionStartY; y < detectionStartY + detectionHeight; y++) {
                 for (let x = detectionStartX; x < detectionStartX + detectionWidth; x++) {
-                     if (x >= 0 && x < width && y >= 0 && y < height) {  // bounds checking
+                    if (x >= 0 && x < width && y >= 0 && y < height) {
                         const i = (y * width + x) * 4;
                         const r1 = previousFrameData[i];
                         const g1 = previousFrameData[i + 1];
@@ -280,6 +304,7 @@
 
             const totalPixelsInArea = detectionWidth * detectionHeight;
             const motionPercentage = motionPixels / totalPixelsInArea;
+            let motionDetected = false;
 
             if (motionPercentage > areaThreshold) {
                 log(`Motion Detected in ${areaId}!`);
@@ -287,11 +312,13 @@
                 setTimeout(() => {
                     indicator.style.backgroundColor = 'rgba(255, 0, 0, 0)';
                 }, 300);
+                motionDetected = true;
             }
+            return motionDetected; // Return true if motion detected, false otherwise
         }
 
         function startDetection() {
-            if(!streaming) {
+            if (!streaming) {
                 alert("Camera not ready. Please allow camera access.");
                 return;
             }
@@ -315,6 +342,19 @@
             log('Detection stopped.');
             cancelAnimationFrame(rafId);
             previousFrameData = null;
+            turnOffLight(); //turn light off when stopping detection
+        }
+
+        function turnOnLight() {
+            lightOn = true;
+            lightIndicator.classList.add('on');
+            log('Light turned ON!');
+        }
+
+        function turnOffLight() {
+            lightOn = false;
+            lightIndicator.classList.remove('on');
+            log('Light turned OFF!');
         }
 
         startStopButton.addEventListener('click', () => {
@@ -352,7 +392,6 @@
         area3ToggleButton.addEventListener('click', () => {
             area3Active = toggleArea('detectionArea3', area3ToggleButton, area3Active);
         });
-
 
         initCamera();
     </script>
