@@ -42,7 +42,7 @@
             object-fit: cover;
         }
 
-        #motion-overlay {
+        #face-overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -88,8 +88,8 @@
             display: none; /* Initially hidden */
         }
 
-        /* CSS for circle on/off */
-        .circle-button {
+         /* CSS for circle on/off */
+         .circle-button {
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -120,7 +120,7 @@
 
     <div id="camera-view">
         <video id="camera-video" autoplay playsinline muted></video>
-        <canvas id="motion-overlay"></canvas>
+        <canvas id="face-overlay"></canvas>
     </div>
 
     <div id="status">Status: Ready</div>
@@ -128,65 +128,86 @@
     <div class="controls">
         <button id="start-button">Start Monitoring</button>
         <button id="stop-button" disabled>Stop Monitoring</button>
-        <button id="detection-toggle" class="circle-button">
-           <span id="detection-icon">⚪</span> <!-- White Circle (off) -->
+        <button id="face-detection-toggle" class="circle-button">
+            <span id="face-detection-icon">⚪</span> <!-- White Circle (off) -->
         </button>
     </div>
 
     <div id="alert-message" class="alert">
-        Motion Detected! Intruder Alert!
+        Face Detected! Intruder Alert!
     </div>
 
     <audio id="alarm-sound" src="alarm.mp3" preload="auto"></audio>
 
-    <div id="ip-address"></div>
+    <div id="known-faces">
+        <h3>Known Faces</h3>
+        <ul id="known-faces-list"></ul>
+    </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@latest/dist/face-api.min.js"></script>
 <script>
     const cameraVideo = document.getElementById('camera-video');
-    const motionOverlay = document.getElementById('motion-overlay');
+    const faceOverlay = document.getElementById('face-overlay');
     const statusDisplay = document.getElementById('status');
     const startButton = document.getElementById('start-button');
     const stopButton = document.getElementById('stop-button');
     const alertMessage = document.getElementById('alert-message');
     const alarmSound = document.getElementById('alarm-sound');
-    const motionOverlayCtx = motionOverlay.getContext('2d');
-    const detectionToggle = document.getElementById('detection-toggle');
-    const detectionIcon = document.getElementById('detection-icon');  // Icon for toggle
-    const ipAddressDisplay = document.getElementById('ip-address');
+    const faceOverlayCtx = faceOverlay.getContext('2d');
+    const faceDetectionToggle = document.getElementById('face-detection-toggle');
+    const faceDetectionIcon = document.getElementById('face-detection-icon');
+    const knownFacesList = document.getElementById('known-faces-list');
 
     let monitoringActive = false;
-    let motionDetectionEnabled = true; // Initially enabled
-    let lastFrameData = null;
-    let motionThreshold = 30;
-    let detectionInterval = 100;
+    let faceDetectionEnabled = true;
     let stream = null;
-    let motionBoxColor = 'rgba(255, 0, 0, 0.5)';
+    let knownFaceDescriptors = []; // Stores the learned face descriptors
+    let labeledFaceDescriptors = null;
+    let faceDetectionInterval;
 
-   // Function to get IP address (simulated for this single-file example)
-    function getIPAddress() {
-        // In a real app, you would use a service to get the public IP address.
-        // This is a SIMULATION for this example.  It will return a dummy IP.
-        const dummyIP = "192.168.1.100"; // Replace with your actual local IP if known
-        ipAddressDisplay.textContent = "Camera IP: " + dummyIP;
-        return dummyIP;
+    // Load face-api.js models
+    async function loadModels() {
+        statusDisplay.textContent = "Status: Loading Face Detection Models...";
+        await faceapi.nets.tinyFaceDetector.loadFromUri('./models'); //or ssdMobilenetv1
+        await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
+        await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
+        await faceapi.nets.faceExpressionNet.loadFromUri('./models');
+        statusDisplay.textContent = "Status: Face Detection Models Loaded";
+        loadStoredFaces(); // Load known faces after models are loaded
     }
-
 
     async function startCamera() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             cameraVideo.srcObject = stream;
             cameraVideo.onloadedmetadata = () => {
-                motionOverlay.width = cameraVideo.videoWidth;
-                motionOverlay.height = cameraVideo.videoHeight;
+                faceOverlay.width = cameraVideo.videoWidth;
+                faceOverlay.height = cameraVideo.videoHeight;
                 statusDisplay.textContent = "Status: Camera Ready";
-                getIPAddress(); // Get IP address after camera is ready
+                loadModels(); // Load models after camera is ready
             };
         } catch (error) {
             console.error("Error accessing camera:", error);
             statusDisplay.textContent = "Status: Camera Error - " + error.message;
             alert("Error accessing camera. Please make sure you have granted permission.");
+        }
+    }
+
+   // Function to load stored faces from local storage
+    async function loadStoredFaces() {
+        statusDisplay.textContent = "Status: Loading Known Faces...";
+
+        const storedDescriptors = localStorage.getItem('knownFaceDescriptors');
+        if (storedDescriptors) {
+             labeledFaceDescriptors = await JSON.parse(storedDescriptors).map((ld) => {
+                return new faceapi.LabeledFaceDescriptors(ld.label, ld.descriptors.map((d) => new Float32Array(d)));
+            });
+
+            statusDisplay.textContent = "Status: Known Faces Loaded";
+            updateKnownFacesList();
+        } else {
+            statusDisplay.textContent = "Status: No Known Faces Stored";
         }
     }
 
@@ -196,12 +217,15 @@
             return;
         }
 
+        if(!labeledFaceDescriptors){
+            alert("no face storage !!")
+             return;
+        }
         monitoringActive = true;
         startButton.disabled = true;
         stopButton.disabled = false;
         statusDisplay.textContent = "Status: Monitoring...";
-        lastFrameData = captureFrame(cameraVideo);
-        motionDetectionInterval = setInterval(detectMotion, detectionInterval);
+        faceDetectionInterval = setInterval(detectFaces, 100);
     }
 
     function stopMonitoring() {
@@ -210,146 +234,137 @@
         stopButton.disabled = true;
         statusDisplay.textContent = "Status: Ready";
         alertMessage.style.display = 'none';
-        clearInterval(motionDetectionInterval);
+        clearInterval(faceDetectionInterval);
         alarmSound.pause();
         alarmSound.currentTime = 0;
-        motionOverlayCtx.clearRect(0, 0, motionOverlay.width, motionOverlay.height);
+        faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height);
     }
 
-    function captureFrame(video) {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return getImageData(canvas);
-    }
+    async function detectFaces() {
+        if (!monitoringActive || !faceDetectionEnabled) return;
 
-    function getImageData(canvas) {
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        const grayscaleData = [];
+        const detectionOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.3 });
 
-        for (let i = 0; i < data.length; i += 4) {
-            const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            grayscaleData.push(avg);
-        }
-        return grayscaleData;
-    }
+        const fullFaceDescriptions = await faceapi.detectAllFaces(cameraVideo, detectionOptions)
+            .withFaceLandmarks()
+            .withFaceDescriptors();
 
-    function detectMotion() {
-        if (!monitoringActive || !motionDetectionEnabled) return; // Respect toggle state
+         if (fullFaceDescriptions.length > 0) {
+            const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+            const results = fullFaceDescriptions.map(fd => faceMatcher.findBestMatch(fd.descriptor));
 
-        const currentFrameData = captureFrame(cameraVideo);
+            faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height); // Clear before drawing
 
-        if (lastFrameData === null) {
-            lastFrameData = currentFrameData;
-            return;
-        }
+            results.forEach((bestMatch, i) => {
+                const box = fullFaceDescriptions[i].detection.box;
+                const drawBox = new faceapi.draw.DrawBox(box, { label: bestMatch.toString() });
+                drawBox.draw(faceOverlay);
 
-        let motionDetected = false;
-        let motionAreas = [];
-
-        for (let i = 0; i < currentFrameData.length; i++) {
-            const diff = Math.abs(currentFrameData[i] - lastFrameData[i]);
-            if (diff > motionThreshold) {
-                motionDetected = true;
-                const x = (i % (motionOverlay.width));
-                const y = Math.floor(i / (motionOverlay.width));
-                motionAreas.push({ x: x, y: y });
-            }
-        }
-
-        if (motionDetected) {
-            console.log("Motion Detected!");
-            showAlert();
-            drawMotionBoxes(motionAreas);
-        } else {
-            motionOverlayCtx.clearRect(0, 0, motionOverlay.width, motionOverlay.height);
-        }
-
-        lastFrameData = currentFrameData;
-    }
-
-    function drawMotionBoxes(motionAreas) {
-        motionOverlayCtx.clearRect(0, 0, motionOverlay.width, motionOverlay.height);
-        motionOverlayCtx.fillStyle = motionBoxColor;
-
-        let groupedMotionAreas = groupMotionAreas(motionAreas, 10);
-
-        groupedMotionAreas.forEach(group => {
-            let minX = group[0].x;
-            let minY = group[0].y;
-            let maxX = group[0].x;
-            let maxY = group[0].y;
-
-            group.forEach(area => {
-                minX = Math.min(minX, area.x);
-                minY = Math.min(minY, area.y);
-                maxX = Math.max(maxX, area.x);
-                maxY = Math.max(maxY, area.y);
-            });
-
-            motionOverlayCtx.fillRect(minX, minY, maxX - minX, maxY - minY);
-        });
-    }
-
-    function groupMotionAreas(motionAreas, distanceThreshold) {
-        let groups = [];
-        let assigned = new Array(motionAreas.length).fill(false);
-
-        for (let i = 0; i < motionAreas.length; i++) {
-            if (assigned[i]) continue;
-
-            let newGroup = [motionAreas[i]];
-            assigned[i] = true;
-
-            for (let j = i + 1; j < motionAreas.length; j++) {
-                if (!assigned[j]) {
-                    let distance = Math.sqrt(
-                        Math.pow(motionAreas[i].x - motionAreas[j].x, 2) +
-                        Math.pow(motionAreas[i].y - motionAreas[j].y, 2)
-                    );
-
-                    if (distance <= distanceThreshold) {
-                        newGroup.push(motionAreas[j]);
-                        assigned[j] = true;
-                    }
+                if (bestMatch.toString() === 'unknown') {
+                    console.log("Unknown face detected!");
+                    showAlert();
                 }
-            }
-
-            groups.push(newGroup);
+            });
+        } else {
+            faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height); // Clear if no faces
         }
-
-        return groups;
     }
 
+     // Function to show alert
     function showAlert() {
         alertMessage.style.display = 'block';
         alarmSound.play();
     }
 
-    // Motion detection toggle functionality
-    detectionToggle.addEventListener('click', () => {
-        motionDetectionEnabled = !motionDetectionEnabled;
-        if (motionDetectionEnabled) {
-            detectionToggle.classList.add('on');
-            detectionToggle.classList.remove('off');
-            detectionIcon.innerHTML = '⚫'; // Black Circle (on)
+    // Face detection toggle functionality
+    faceDetectionToggle.addEventListener('click', () => {
+        faceDetectionEnabled = !faceDetectionEnabled;
+        if (faceDetectionEnabled) {
+            faceDetectionToggle.classList.add('on');
+            faceDetectionToggle.classList.remove('off');
+            faceDetectionIcon.innerHTML = '⚫'; // Black Circle (on)
         } else {
-            detectionToggle.classList.remove('on');
-            detectionToggle.classList.add('off');
-            detectionIcon.innerHTML = '⚪'; // White Circle (off)
-            motionOverlayCtx.clearRect(0, 0, motionOverlay.width, motionOverlay.height); // Clear overlay
+            faceDetectionToggle.classList.remove('on');
+            faceDetectionToggle.classList.add('off');
+            faceDetectionIcon.innerHTML = '⚪'; // White Circle (off)
+            faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height); // Clear overlay
         }
     });
 
     startButton.addEventListener('click', startMonitoring);
     stopButton.addEventListener('click', stopMonitoring);
 
+    async function learnFace() {
+        if (!stream) {
+            alert("Camera not initialized. Please start the camera first.");
+            return;
+        }
+
+        const label = prompt("Enter the name for this face:");
+        if (!label) return;
+
+        statusDisplay.textContent = "Status: Learning Face...";
+
+        const detectionOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.3 });
+        const fullFaceDescription = await faceapi.detectSingleFace(cameraVideo, detectionOptions)
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+        if (!fullFaceDescription) {
+            alert("No face detected. Please try again.");
+            statusDisplay.textContent = "Status: Ready";
+            return;
+        }
+
+         if (!labeledFaceDescriptors) {
+            labeledFaceDescriptors = [];
+          }
+        labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(label, [fullFaceDescription.descriptor]));
+
+        statusDisplay.textContent = "Status: Face Learned";
+        storeFaces();
+        updateKnownFacesList();
+
+    }
+
+        // Function to store faces in local storage
+    function storeFaces() {
+        if (labeledFaceDescriptors){
+            const serializedDescriptors = JSON.stringify(labeledFaceDescriptors.map((ld) => {
+                return {
+                    label: ld.label,
+                    descriptors: ld.descriptors.map((d) => Array.from(d)),
+                };
+            }));
+
+             localStorage.setItem('knownFaceDescriptors', serializedDescriptors);
+        }
+
+    }
+
+    // Function to update the list of known faces
+    function updateKnownFacesList() {
+        knownFacesList.innerHTML = ''; // Clear the list
+         if(labeledFaceDescriptors){
+            labeledFaceDescriptors.forEach(ld => {
+                const listItem = document.createElement('li');
+                listItem.textContent = ld.label;
+                knownFacesList.appendChild(listItem);
+            });
+         }
+    }
+
+    // Button to learn a new face
+    const learnFaceButton = document.createElement('button');
+    learnFaceButton.textContent = "Learn Face";
+    learnFaceButton.addEventListener('click', learnFace);
+    document.querySelector('.controls').appendChild(learnFaceButton);
+
+    // Load models and start camera
     startCamera();
 </script>
+<script>
 
+</script>
 </body>
 </html>
