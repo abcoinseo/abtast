@@ -1,524 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Pro Security Camera</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Detection Camera</title>
     <style>
         body {
             font-family: sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f0f0f0;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            min-height: 100vh;
-        }
-
-        .camera-container {
-            width: 600px;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
             padding: 20px;
-            text-align: center;
         }
 
-        #camera-view {
-            width: 100%;
-            height: 300px;
-            background-color: #ccc;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
+        #video-container {
             position: relative;
-        }
-
-        #camera-view video {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: cover;
-        }
-
-        #face-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-
-        .controls {
-            display: flex;
-            justify-content: space-around;
+            width: 640px; /* Adjust as needed */
+            height: 480px; /* Adjust as needed */
             margin-bottom: 20px;
         }
 
-        button {
-            padding: 10px 20px;
-            border: none;
-            background-color: #4CAF50;
-            color: white;
+        #camera-feed {
+            width: 100%;
+            height: 100%;
+            background-color: #eee; /* Placeholder background */
+        }
+
+        #object-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #object-list li {
+            margin-bottom: 5px;
+            padding: 5px;
+            background-color: #f0f0f0;
             border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
         }
 
-        button:hover {
-            background-color: #3e8e41;
-        }
-
-        #status {
-            font-weight: bold;
-            color: #555;
-            margin-bottom: 10px;
-        }
-
-        .alert {
+        #alert-box {
             background-color: #fdd;
-            color: #a00;
             border: 1px solid #f00;
             padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            display: none;
-        }
-
-        .circle-button {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background-color: #ccc;
-            border: none;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: background-color 0.3s ease;
-            margin: 5px;
-        }
-
-        .circle-button.on {
-            background-color: #4CAF50;
-        }
-
-        .circle-button:hover {
-            opacity: 0.8;
-        }
-
-        #preview-window {
-            width: 400px;
-            height: 300px;
-            background-color: #eee;
-            margin-top: 20px;
-            border-radius: 5px;
-            overflow: hidden;
-            display: none;
-        }
-
-        #preview-window canvas {
-            max-width: 100%;
-            max-height: 100%;
+            margin-top: 10px;
+            display: none; /* Hidden by default */
         }
     </style>
 </head>
 <body>
 
-<div class="camera-container">
-    <h1>Pro Security Camera</h1>
+    <h1>Object Detection Camera</h1>
 
-    <div id="camera-view">
-        <video id="camera-video" autoplay playsinline muted></video>
-        <canvas id="face-overlay"></canvas>
+    <div id="video-container">
+        <video id="camera-feed" autoplay muted></video>
     </div>
 
-    <div id="status">Status: Ready</div>
+    <h2>Detected Objects:</h2>
+    <ul id="object-list"></ul>
 
-    <div class="controls">
-        <button id="start-button">Start Monitoring</button>
-        <button id="stop-button" disabled>Stop Monitoring</button>
-        <button id="face-detection-toggle" class="circle-button">
-            <span id="face-detection-icon">⚪</span>
-        </button>
-        <button id="open-preview">Open Preview</button>  <!-- New button -->
+    <div id="alert-box">
+        <strong>Alert:</strong> Unauthorized object detected in the area!
     </div>
 
-    <div id="alert-message" class="alert">
-        Face Detected! Intruder Alert!
-    </div>
+    <script>
+        const video = document.getElementById('camera-feed');
+        const objectList = document.getElementById('object-list');
+        const alertBox = document.getElementById('alert-box');
 
-    <audio id="alarm-sound" src="alarm.mp3" preload="auto"></audio>
+        const geminiApiKey = 'AIzaSyDyu0thYNv9bhUlpRxxQbWZq59Wfm9ZDGc'; // **REPLACE THIS!**
+        const unauthorizedObjects = ['person', 'car']; // Example objects
 
-    <div id="known-faces">
-        <h3>Known Faces</h3>
-        <ul id="known-faces-list"></ul>
-    </div>
-
-    <div id="ip-address"></div>
-
-    <div id="preview-window">
-        <canvas id="preview-canvas"></canvas>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@latest/dist/face-api.min.js"></script>
-<script>
-    // DOM Elements
-    const cameraVideo = document.getElementById('camera-video');
-    const faceOverlay = document.getElementById('face-overlay');
-    const statusDisplay = document.getElementById('status');
-    const startButton = document.getElementById('start-button');
-    const stopButton = document.getElementById('stop-button');
-    const alertMessage = document.getElementById('alert-message');
-    const alarmSound = document.getElementById('alarm-sound');
-    const faceOverlayCtx = faceOverlay.getContext('2d');
-    const faceDetectionToggle = document.getElementById('face-detection-toggle');
-    const faceDetectionIcon = document.getElementById('face-detection-icon');
-    const knownFacesList = document.getElementById('known-faces-list');
-    const ipAddressDisplay = document.getElementById('ip-address');
-    const openPreviewButton = document.getElementById('open-preview'); // New button
-    const previewWindow = document.getElementById('preview-window');
-    const previewCanvas = document.getElementById('preview-canvas');
-    const previewCtx = previewCanvas.getContext('2d');
-
-    // State Variables
-    let monitoringActive = false;
-    let faceDetectionEnabled = true;
-    let stream = null;
-    let labeledFaceDescriptors = null;
-    let faceDetectionInterval;
-    let previewWindowOpen = false;
-
-    // Configuration
-    const detectionInterval = 100; // Face detection interval (milliseconds)
-    const faceMatchThreshold = 0.6;
-    const cameraSettings = { width: 640, height: 480 }; // Optimized resolution
-
-    // Simulated "Server" Data (In-Memory Only!)
-    const serverData = {
-        ipAddress: generateRandomIP(), // Generate a random IP address
-        knownFaces: [],  // Stores LabeledFaceDescriptors
-        cameraFeed: null  // Stores the latest camera feed
-    };
-
-    //=========================================================================
-    // Utility Functions
-    //=========================================================================
-
-    // Function to generate a random IP address (more realistic simulation)
-    function generateRandomIP() {
-        const base = "192.168.1."; // Common private IP range
-        return base + Math.floor(Math.random() * 255);
-    }
-
-    // Function to display error messages
-    function displayError(message) {
-        statusDisplay.textContent = "Error: " + message;
-        alert(message);
-    }
-
-    // Custom event dispatch function (simulates server-side events)
-    function dispatchEvent(eventName, detail) {
-        const event = new CustomEvent(eventName, { detail: detail });
-        document.dispatchEvent(event);
-    }
-
-    //=========================================================================
-    // Face Detection and Recognition
-    //=========================================================================
-
-    // Load face-api.js models
-    async function loadModels() {
-        try {
-            statusDisplay.textContent = "Status: Loading Face Detection Models...";
-            await faceapi.nets.tinyFaceDetector.loadFromUri('./models');
-            await faceapi.nets.faceLandmark68Net.loadFromUri('./models');
-            await faceapi.nets.faceRecognitionNet.loadFromUri('./models');
-            await faceapi.nets.faceExpressionNet.loadFromUri('./models');
-            statusDisplay.textContent = "Status: Face Detection Models Loaded";
-            loadStoredFaces(); // Load known faces after models are loaded
-        } catch (error) {
-            displayError("Failed to load face detection models: " + error.message);
-        }
-    }
-
-    // Function to load stored faces from local storage
-    async function loadStoredFaces() {
-        statusDisplay.textContent = "Status: Loading Known Faces...";
-
-        const storedDescriptors = localStorage.getItem('knownFaceDescriptors');
-        if (storedDescriptors) {
-             try {
-                 labeledFaceDescriptors = await JSON.parse(storedDescriptors).map((ld) => {
-                    return new faceapi.LabeledFaceDescriptors(ld.label, ld.descriptors.map((d) => new Float32Array(d)));
-                });
-             }catch (error){
-                displayError("Error loading or parsing stored faces: " + error.message);
-                labeledFaceDescriptors = null; // Ensure it's null for safe handling
-                return;
-             }
-
-            statusDisplay.textContent = "Status: Known Faces Loaded";
-            updateKnownFacesList();
-        } else {
-            statusDisplay.textContent = "Status: No Known Faces Stored";
-        }
-    }
-
-    // Function to detect faces
-    async function detectFaces() {
-        if (!monitoringActive || !faceDetectionEnabled || !labeledFaceDescriptors) return;
-
-        const detectionOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.3 });
-
-        try {
-            const fullFaceDescriptions = await faceapi.detectAllFaces(cameraVideo, detectionOptions)
-                .withFaceLandmarks()
-                .withFaceDescriptors();
-
-             faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height); // Clear before drawing
-
-            if (fullFaceDescriptions.length > 0) {
-                const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, faceMatchThreshold);
-                const results = fullFaceDescriptions.map(fd => faceMatcher.findBestMatch(fd.descriptor));
-
-                results.forEach((bestMatch, i) => {
-                    const box = fullFaceDescriptions[i].detection.box;
-                    const drawBox = new faceapi.draw.DrawBox(box, { label: bestMatch.toString() });
-                    drawBox.draw(faceOverlay);
-
-                    if (bestMatch.toString() === 'unknown') {
-                        console.log("Unknown face detected!");
-                        showAlert();
-                    }
-                });
-            }
-        } catch (error) {
-            console.error("Face detection error:", error);
-            statusDisplay.textContent = "Error in face detection: " + error.message;
-            faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height);
-        }
-    }
-
-    //=========================================================================
-    // Camera and Preview Handling
-    //=========================================================================
-
-    // Function to start the camera
-    async function startCamera() {
-        try {
-            statusDisplay.textContent = "Status: Starting Camera...";
-            stream = await navigator.mediaDevices.getUserMedia({ video: cameraSettings, audio: false });
-            cameraVideo.srcObject = stream;
-
-            cameraVideo.onloadedmetadata = () => {
-                faceOverlay.width = cameraVideo.videoWidth;
-                faceOverlay.height = cameraVideo.videoHeight;
-                previewCanvas.width = cameraVideo.videoWidth;
-                previewCanvas.height = cameraVideo.videoHeight;
-                statusDisplay.textContent = "Status: Camera Ready - IP: " + serverData.ipAddress;
-
-                // Store the dimensions in the serverData
-                 serverData.videoWidth = cameraVideo.videoWidth;
-                 serverData.videoHeight = cameraVideo.videoHeight;
-
-                loadModels();
-                getIPAddress();  //Simulate getting IP
-            };
-        } catch (error) {
-            console.error("Error accessing camera:", error);
-            displayError("Failed to access camera. Please check permissions.");
-        }
-    }
-
-   function getIPAddress() {
-        ipAddressDisplay.textContent = "Camera IP: " + serverData.ipAddress;
-   }
-
-    // Capture frame for preview and "server" storage
-    function captureFrame() {
-        if (!stream) return; // Check if the camera stream exists.
-        const canvas = document.createElement('canvas');
-        canvas.width = cameraVideo.videoWidth;
-        canvas.height = cameraVideo.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
-        const frameData = canvas.toDataURL('image/jpeg'); // Use JPEG for smaller size
-        serverData.cameraFeed = frameData; // "Store" the frame
-        return frameData;
-    }
-
-    // Function to update the preview window
-    function updatePreviewWindow() {
-        if (!previewWindowOpen || !serverData.cameraFeed) return;
-
-        try {
-            const img = new Image();
-            img.onload = () => {
-                previewCtx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
-            };
-            img.src = serverData.cameraFeed;
-
-            //Simulate red dot indicating active preview
-             previewCtx.fillStyle = "red";
-             previewCtx.beginPath();
-             previewCtx.arc(10, 10, 5, 0, 2 * Math.PI); // Draw a small red circle
-             previewCtx.fill();
-        } catch (error) {
-            console.error("Error updating preview window:", error);
-        }
-    }
-
-    // Function to open/close the preview window
-    function togglePreviewWindow() {
-        previewWindowOpen = !previewWindowOpen;
-        previewWindow.style.display = previewWindowOpen ? 'block' : 'none';
-
-         if (previewWindowOpen) {
-            updatePreviewWindow(); // Initial update
-            setInterval(updatePreviewWindow, 200); // Update every 200ms (simulated)
-        }
-    }
-
-    //=========================================================================
-    // State Management and Event Handling
-    //=========================================================================
-
-    // Start monitoring function
-    function startMonitoring() {
-        if (!stream) {
-            displayError("Camera not initialized. Please start the camera first.");
-            return;
-        }
-         if(!labeledFaceDescriptors){
-            displayError("no face storage !!");
-             return;
-        }
-
-        monitoringActive = true;
-        startButton.disabled = true;
-        stopButton.disabled = false;
-        statusDisplay.textContent = "Status: Monitoring...";
-
-        faceDetectionInterval = setInterval(() => {
-            if (monitoringActive) {
-                detectFaces();
-                captureFrame(); //Update Camera Feed
-            }
-        }, detectionInterval);
-
-    }
-
-    // Stop monitoring function
-    function stopMonitoring() {
-        monitoringActive = false;
-        startButton.disabled = false;
-        stopButton.disabled = true;
-        statusDisplay.textContent = "Status: Ready";
-        alertMessage.style.display = 'none';
-        clearInterval(faceDetectionInterval);
-        alarmSound.pause();
-        alarmSound.currentTime = 0;
-        faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height);
-    }
-
-    // Function to show alert
-    function showAlert() {
-        alertMessage.style.display = 'block';
-        alarmSound.play();
-    }
-
-    //Learn Face Function
-    async function learnFace() {
-        if (!stream) {
-            displayError("Camera not initialized. Please start the camera first.");
-            return;
-        }
-
-        const label = prompt("Enter the name for this face:");
-        if (!label) return;
-
-        statusDisplay.textContent = "Status: Learning Face...";
-
-        const detectionOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.3 });
-        try{
-            const fullFaceDescription = await faceapi.detectSingleFace(cameraVideo, detectionOptions)
-                .withFaceLandmarks()
-                .withFaceDescriptor();
-
-            if (!fullFaceDescription) {
-                displayError("No face detected. Please try again.");
-                statusDisplay.textContent = "Status: Ready";
-                return;
-            }
-
-            if (!labeledFaceDescriptors) {
-                labeledFaceDescriptors = [];
-            }
-            labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(label, [fullFaceDescription.descriptor]));
-
-            statusDisplay.textContent = "Status: Face Learned";
-            storeFaces();
-            updateKnownFacesList();
-
-        } catch (error) {
-             displayError("Error while learning face: " + error.message);
-        }
-    }
-
-    // Local storage Functions
-    function storeFaces() {
-         if (labeledFaceDescriptors){
+        async function getCameraStream() {
             try {
-                 const serializedDescriptors = JSON.stringify(labeledFaceDescriptors.map((ld) => {
-                    return {
-                        label: ld.label,
-                        descriptors: ld.descriptors.map((d) => Array.from(d)),
-                    };
-                }));
-                localStorage.setItem('knownFaceDescriptors', serializedDescriptors);
-            } catch (error){
-                 displayError("Error storing faces to local storage: " + error.message);
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Error accessing camera.  Ensure you have a camera and have granted permission.');
             }
         }
-    }
 
-    // Update Known Faces List
-    function updateKnownFacesList() {
-        knownFacesList.innerHTML = ''; // Clear the list
-         if(labeledFaceDescriptors){
-            labeledFaceDescriptors.forEach(ld => {
-                const listItem = document.createElement('li');
-                listItem.textContent = ld.label;
-                knownFacesList.appendChild(listItem);
+        async function analyzeFrame() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageDataUrl = canvas.toDataURL('image/jpeg'); // Or 'image/png'
+
+            try {
+                const objectNames = await getObjectNamesFromGemini(imageDataUrl);
+                displayObjects(objectNames);
+                checkForAlert(objectNames);
+            } catch (error) {
+                console.error('Error analyzing frame:', error);
+            }
+
+            setTimeout(analyzeFrame, 2000); // Analyze every 2 seconds (adjust as needed)
+        }
+
+        async function getObjectNamesFromGemini(imageDataUrl) {
+             const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=' + geminiApiKey; // Modify to your endpoint if needed
+
+             const requestData = {
+                contents: [
+                    {
+                        parts: [
+                            {
+                                text: "What objects are visible in this image? Only give a comma-separated list of the object names.  Do not include any other text or explanation."
+                            },
+                            {
+                                inline_data: {
+                                    mime_type: "image/jpeg", // Or image/png
+                                    data: imageDataUrl.split(',')[1] // Remove the data:image/jpeg;base64, part
+                                }
+                            }
+                        ]
+                    }
+                ]
+            };
+
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
             });
-         }
-    }
 
-    // UI Event Listeners
-    faceDetectionToggle.addEventListener('click', () => {
-        faceDetectionEnabled = !faceDetectionEnabled;
-        faceDetectionToggle.classList.toggle('on', faceDetectionEnabled);
-        faceDetectionToggle.classList.toggle('off', !faceDetectionEnabled);
-        faceDetectionIcon.innerHTML = faceDetectionEnabled ? '⚫' : '⚪';
-        faceOverlayCtx.clearRect(0, 0, faceOverlay.width, faceOverlay.height);
-    });
+            if (!response.ok) {
+                throw new Error(`Gemini API error: ${response.status} - ${response.statusText}`);
+            }
 
-    startButton.addEventListener('click', startMonitoring);
-    stopButton.addEventListener('click', stopMonitoring);
-    openPreviewButton.addEventListener('click', togglePreviewWindow);  // Preview button
+            const data = await response.json();
 
-    // Learn Face Button
-    const learnFaceButton = document.createElement('button');
-    learnFaceButton.textContent = "Learn Face";
-    learnFaceButton.addEventListener('click', learnFace);
-    document.querySelector('.controls').appendChild(learnFaceButton);
+            // Extract object names (this part is VERY important to get right for Gemini!)
+            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
+                const detectedObjectsText = data.candidates[0].content.parts[0].text;
+                console.log("Gemini response:", detectedObjectsText); // Log the raw response to help debug
+                return detectedObjectsText.split(',').map(item => item.trim()); // Split into array
+            } else {
+                console.warn("Unexpected Gemini API response:", data);
+                return []; // Return empty array if no objects found
+            }
+        }
 
-    // Initialize
-    startCamera();
-</script>
+
+
+        function displayObjects(objects) {
+            objectList.innerHTML = ''; // Clear the list
+            objects.forEach(objectName => {
+                const listItem = document.createElement('li');
+                listItem.textContent = objectName;
+                objectList.appendChild(listItem);
+            });
+        }
+
+        function checkForAlert(objects) {
+            const unauthorizedDetected = objects.some(object => unauthorizedObjects.includes(object.toLowerCase())); // Case-insensitive check
+            if (unauthorizedDetected) {
+                alertBox.style.display = 'block';
+            } else {
+                alertBox.style.display = 'none';
+            }
+        }
+
+        // Start the camera and analysis
+        getCameraStream().then(() => {
+            analyzeFrame();
+        });
+
+    </script>
 </body>
 </html>
