@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Motion Detector Camera</title>
+<title>Advanced Motion Detector Camera</title>
 <style>
   body {
     font-family: sans-serif;
@@ -11,7 +11,13 @@
     justify-content: center;
     min-height: 100vh;
     margin: 0;
-    background-color: #f0f0f0;
+    background-color: #222;
+    color: #eee;
+  }
+
+  h1 {
+    color: #ddd;
+    margin-bottom: 20px;
   }
 
   #video-container {
@@ -21,7 +27,7 @@
   #video-element {
     width: 640px;
     height: 480px;
-    background-color: black; /* Placeholder until video loads */
+    background-color: black;
   }
 
   #debug-canvas {
@@ -30,30 +36,95 @@
     left: 0;
     width: 640px;
     height: 480px;
-    pointer-events: none; /* Ensure canvas doesn't block interaction */
+    pointer-events: none;
+  }
+
+  #controls {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Align labels and inputs to the left */
+    width: 640px; /* Match video width */
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Add space between label and input */
+    margin-bottom: 10px;
+    width: 100%;
+  }
+
+  label {
+    margin-right: 10px; /* Add a bit of space between label and input */
+    width: 150px; /* Fixed width for labels */
+    text-align: left;
+  }
+
+  input[type="range"] {
+    width: 70%; /* Make slider take up the remaining space */
   }
 
   #status {
-    margin-top: 10px;
+    margin-top: 20px;
     font-weight: bold;
-    color: #333;
+    color: #bbb;
+    padding: 10px;
+    border: 1px solid #555;
+    border-radius: 5px;
   }
 
   .motion-detected {
-    color: red;
+    color: lightgreen;
+    background-color: rgba(0, 255, 0, 0.1);
+  }
+
+  #download-link {
+    display: none;
+    margin-top: 10px;
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+  }
+
+  #download-link:hover {
+    background-color: #3e8e41;
   }
 </style>
 </head>
 <body>
 
-  <h1>Motion Detector Camera</h1>
+  <h1>Advanced Motion Detector Camera</h1>
 
   <div id="video-container">
     <video id="video-element" autoplay muted></video>
     <canvas id="debug-canvas"></canvas>
   </div>
 
+  <div id="controls">
+    <div class="control-row">
+      <label for="motion-threshold">Motion Sensitivity:</label>
+      <input type="range" id="motion-threshold" min="1" max="100" value="25">
+      <span id="motion-threshold-value">25</span>
+    </div>
+
+    <div class="control-row">
+      <label for="detection-interval">Detection Interval (ms):</label>
+      <input type="range" id="detection-interval" min="10" max="500" value="100">
+      <span id="detection-interval-value">100</span>
+    </div>
+
+    <div class="control-row">
+      <label for="noise-reduction">Noise Reduction:</label>
+      <input type="range" id="noise-reduction" min="0" max="50" value="0">
+      <span id="noise-reduction-value">0</span>
+    </div>
+  </div>
+
   <div id="status">No motion detected.</div>
+  <a id="download-link" href="#" download="motion_capture.png">Download Last Capture</a>
 
 
   <script>
@@ -61,10 +132,22 @@
     const debugCanvas = document.getElementById('debug-canvas');
     const statusElement = document.getElementById('status');
     const debugContext = debugCanvas.getContext('2d');
+    const downloadLink = document.getElementById('download-link');
+
+    const motionThresholdSlider = document.getElementById('motion-threshold');
+    const motionThresholdValue = document.getElementById('motion-threshold-value');
+    const detectionIntervalSlider = document.getElementById('detection-interval');
+    const detectionIntervalValue = document.getElementById('detection-interval-value');
+    const noiseReductionSlider = document.getElementById('noise-reduction');
+    const noiseReductionValue = document.getElementById('noise-reduction-value');
+
 
     let previousFrameData = null;
-    const motionThreshold = 25; // Adjust sensitivity (lower = more sensitive)
-    const detectionInterval = 100; // milliseconds between frames
+    let motionThreshold = 25;
+    let detectionInterval = 100;
+    let noiseReduction = 0;
+    let lastMotionCapture = null;
+
 
     async function startCamera() {
       try {
@@ -76,16 +159,55 @@
       }
     }
 
+
+    function applyNoiseReduction(frameData, width, height, reductionLevel) {
+      if (reductionLevel <= 0) return;
+
+      for (let i = 0; i < frameData.length; i += 4) {
+        const x = (i / 4) % width;
+        const y = Math.floor((i / 4) / width);
+
+        let totalR = frameData[i];
+        let totalG = frameData[i + 1];
+        let totalB = frameData[i + 2];
+        let count = 1;
+
+        // Average color with neighboring pixels
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue; // Skip current pixel
+
+            const nx = x + dx;
+            const ny = y + dy;
+
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const neighborIndex = (ny * width + nx) * 4;
+              totalR += frameData[neighborIndex];
+              totalG += frameData[neighborIndex + 1];
+              totalB += frameData[neighborIndex + 2];
+              count++;
+            }
+          }
+        }
+
+        frameData[i] = (frameData[i] * (100 - reductionLevel) + (totalR / count) * reductionLevel) / 100;
+        frameData[i + 1] = (frameData[i + 1] * (100 - reductionLevel) + (totalG / count) * reductionLevel) / 100;
+        frameData[i + 2] = (frameData[i + 2] * (100 - reductionLevel) + (totalB / count) * reductionLevel) / 100;
+      }
+    }
+
+
     function detectMotion() {
       if (!videoElement.videoWidth) {
-        return; // Wait for video to load
+        return;
       }
-
 
       debugCanvas.width = videoElement.videoWidth;
       debugCanvas.height = videoElement.videoHeight;
       debugContext.drawImage(videoElement, 0, 0, debugCanvas.width, debugCanvas.height);
       const currentFrameData = debugContext.getImageData(0, 0, debugCanvas.width, debugCanvas.height).data;
+
+      applyNoiseReduction(currentFrameData, debugCanvas.width, debugCanvas.height, noiseReduction);
 
       if (previousFrameData) {
         let motionDetected = false;
@@ -100,26 +222,28 @@
           }
         }
 
-         // Simple threshold for motion based on the number of different pixels
-         if (diffCount > 2000) {
-            motionDetected = true;
-         }
+        if (diffCount > 2000) {
+          motionDetected = true;
+        }
 
         if (motionDetected) {
           statusElement.textContent = "Motion detected!";
-          statusElement.classList.add('motion-detected'); // Highlight with CSS
-          // You can add more actions here (e.g., sound alert, data logging)
+          statusElement.classList.add('motion-detected');
+
+          // Capture and offer download
+          lastMotionCapture = debugCanvas.toDataURL("image/png");
+          downloadLink.href = lastMotionCapture;
+          downloadLink.style.display = 'block'; // Show download link
         } else {
           statusElement.textContent = "No motion detected.";
           statusElement.classList.remove('motion-detected');
+          downloadLink.style.display = 'none'; // Hide download link when no motion
         }
       }
 
-
-      previousFrameData = new Uint8ClampedArray(currentFrameData); // Clone the data
+      previousFrameData = new Uint8ClampedArray(currentFrameData);
       setTimeout(detectMotion, detectionInterval);
     }
-
 
     videoElement.addEventListener('loadedmetadata', () => {
       debugCanvas.width = videoElement.videoWidth;
@@ -128,7 +252,25 @@
     });
 
 
-    startCamera(); // Start the camera feed on page load
+    // Event listeners for slider changes
+    motionThresholdSlider.addEventListener('input', () => {
+      motionThreshold = parseInt(motionThresholdSlider.value);
+      motionThresholdValue.textContent = motionThreshold;
+    });
+
+    detectionIntervalSlider.addEventListener('input', () => {
+      detectionInterval = parseInt(detectionIntervalSlider.value);
+      detectionIntervalValue.textContent = detectionInterval;
+    });
+
+    noiseReductionSlider.addEventListener('input', () => {
+      noiseReduction = parseInt(noiseReductionSlider.value);
+      noiseReductionValue.textContent = noiseReduction;
+    });
+
+
+
+    startCamera();
   </script>
 
 </body>
