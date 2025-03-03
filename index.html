@@ -3,152 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Object Detection Camera</title>
+    <title>Advanced Object Detection Camera</title>
     <style>
         body {
             font-family: sans-serif;
+            background-color: #111; /* Dark background */
+            color: #ddd;
             display: flex;
-            flex-direction: column;
+            flex-direction: column; /* Up-to-down layout */
             align-items: center;
             padding: 20px;
         }
 
-        #video-container {
-            position: relative;
-            width: 640px; /* Adjust as needed */
-            height: 480px; /* Adjust as needed */
+        h1 {
+            color: #00bcd4; /* Jarvis-like color */
             margin-bottom: 20px;
         }
 
-        #camera-feed {
+        .camera-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            margin-bottom: 20px;
+        }
+
+        .camera-feed {
             width: 100%;
             height: 100%;
-            background-color: #eee; /* Placeholder background */
+            background-color: #222;
         }
 
-        #object-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        #object-list li {
-            margin-bottom: 5px;
-            padding: 5px;
-            background-color: #f0f0f0;
-            border-radius: 5px;
+        .object-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allow clicks to pass through */
         }
 
         #alert-box {
-            background-color: #fdd;
-            border: 1px solid #f00;
+            background-color: #d32f2f; /* Red alert */
+            color: white;
             padding: 10px;
             margin-top: 10px;
-            display: none; /* Hidden by default */
+            border-radius: 5px;
+            display: none;
         }
+
+        #object-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+
+        #object-list li {
+          margin-bottom: 5px;
+          padding: 5px;
+          background-color: #444;
+          border-radius: 5px;
+        }
+
     </style>
+    <!-- Include TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+    <!-- Include COCO-SSD model (or your preferred model) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+    <!-- *IMPORTANT*:  Replace these with *LOCAL* files for production! -->
 </head>
 <body>
 
-    <h1>Object Detection Camera</h1>
+    <h1>Advanced Object Detection System</h1>
 
-    <div id="video-container">
-        <video id="camera-feed" autoplay muted></video>
+    <div class="camera-container">
+        <h2>Camera 1</h2>
+        <video id="camera-feed-1" class="camera-feed" autoplay muted></video>
+        <canvas id="object-overlay-1" class="object-overlay"></canvas>
+    </div>
+
+    <div class="camera-container">
+        <h2>Camera 2</h2>
+        <video id="camera-feed-2" class="camera-feed" autoplay muted></video>
+        <canvas id="object-overlay-2" class="object-overlay"></canvas>
     </div>
 
     <h2>Detected Objects:</h2>
     <ul id="object-list"></ul>
 
     <div id="alert-box">
-        <strong>Alert:</strong> Unauthorized object detected in the area!
+        <strong>Alert:</strong> Unauthorized object detected! No Entry!
     </div>
 
     <script>
-        const video = document.getElementById('camera-feed');
-        const objectList = document.getElementById('object-list');
+        // Configuration
+        const unauthorizedObjects = ['person', 'car'];
+        const detectionInterval = 1000; // Milliseconds
+        const confidenceThreshold = 0.5; // Minimum confidence for detection
+
+        // Get DOM elements
+        const video1 = document.getElementById('camera-feed-1');
+        const video2 = document.getElementById('camera-feed-2');
+        const overlay1 = document.getElementById('object-overlay-1');
+        const overlay2 = document.getElementById('object-overlay-2');
         const alertBox = document.getElementById('alert-box');
+        const objectList = document.getElementById('object-list');
 
-        const geminiApiKey = 'AIzaSyDyu0thYNv9bhUlpRxxQbWZq59Wfm9ZDGc'; // **REPLACE THIS!**
-        const unauthorizedObjects = ['person', 'car']; // Example objects
+        let model = null; // TensorFlow.js model
+        let speaking = false; // Flag to prevent overlapping speech
 
-        async function getCameraStream() {
+        async function loadModel() {
+            try {
+                model = await cocoSsd.load(); // Use cocoSsd for now
+                console.log("Model loaded.");
+            } catch (error) {
+                console.error("Error loading model:", error);
+                alert("Failed to load object detection model. Check console for errors.");
+            }
+        }
+
+        async function getCameraStream(videoElement) {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
+                videoElement.srcObject = stream;
             } catch (error) {
                 console.error('Error accessing camera:', error);
                 alert('Error accessing camera.  Ensure you have a camera and have granted permission.');
             }
         }
 
-        async function analyzeFrame() {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        function detectObjects(videoElement, overlayElement) {
+            if (!model) return; // Model not loaded yet
 
-            const imageDataUrl = canvas.toDataURL('image/jpeg'); // Or 'image/png'
-
-            try {
-                const objectNames = await getObjectNamesFromGemini(imageDataUrl);
-                displayObjects(objectNames);
-                checkForAlert(objectNames);
-            } catch (error) {
-                console.error('Error analyzing frame:', error);
-            }
-
-            setTimeout(analyzeFrame, 2000); // Analyze every 2 seconds (adjust as needed)
+            model.detect(videoElement)
+                .then(predictions => {
+                    drawBoxes(predictions, videoElement, overlayElement);
+                    const detectedObjectNames = predictions.map(p => p.class);
+                    displayObjects(detectedObjectNames);
+                    checkForAlert(detectedObjectNames);
+                })
+                .catch(error => {
+                    console.error("Error detecting objects:", error);
+                });
         }
 
-        async function getObjectNamesFromGemini(imageDataUrl) {
-             const apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=' + geminiApiKey; // Modify to your endpoint if needed
+        function drawBoxes(predictions, videoElement, overlayElement) {
+            const ctx = overlayElement.getContext('2d');
+            ctx.clearRect(0, 0, overlayElement.width, overlayElement.height); // Clear previous boxes
+            overlayElement.width = videoElement.videoWidth;
+            overlayElement.height = videoElement.videoHeight;
 
-             const requestData = {
-                contents: [
-                    {
-                        parts: [
-                            {
-                                text: "What objects are visible in this image? Only give a comma-separated list of the object names.  Do not include any other text or explanation."
-                            },
-                            {
-                                inline_data: {
-                                    mime_type: "image/jpeg", // Or image/png
-                                    data: imageDataUrl.split(',')[1] // Remove the data:image/jpeg;base64, part
-                                }
-                            }
-                        ]
-                    }
-                ]
-            };
+            predictions.forEach(prediction => {
+                if (prediction.score > confidenceThreshold) {
+                    const [x, y, width, height] = prediction.bbox;
 
+                    ctx.beginPath();
+                    ctx.rect(x, y, width, height);
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#00bcd4'; // Highlight color
+                    ctx.fillStyle = '#00bcd422'; // Semi-transparent fill
+                    ctx.fill();
+                    ctx.stroke();
 
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
+                    ctx.font = '16px sans-serif';
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(prediction.class + ' (' + Math.round(prediction.score * 100) + '%)', x + 5, y + 20);
+                }
             });
-
-            if (!response.ok) {
-                throw new Error(`Gemini API error: ${response.status} - ${response.statusText}`);
-            }
-
-            const data = await response.json();
-
-            // Extract object names (this part is VERY important to get right for Gemini!)
-            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0].text) {
-                const detectedObjectsText = data.candidates[0].content.parts[0].text;
-                console.log("Gemini response:", detectedObjectsText); // Log the raw response to help debug
-                return detectedObjectsText.split(',').map(item => item.trim()); // Split into array
-            } else {
-                console.warn("Unexpected Gemini API response:", data);
-                return []; // Return empty array if no objects found
-            }
         }
 
+        function checkForAlert(objects) {
+          const unauthorizedDetected = objects.some(object => unauthorizedObjects.includes(object.toLowerCase()));
 
+            if (unauthorizedDetected && !speaking) {
+                speaking = true;
+                speak("Unauthorized object detected! No Entry!");
+                alertBox.style.display = 'block';
+                setTimeout(() => {
+                    speaking = false; // Allow speaking again after a delay
+                    alertBox.style.display = 'none';
+                }, 5000); // Alert for 5 seconds
+            }
+
+        }
+
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        }
 
         function displayObjects(objects) {
             objectList.innerHTML = ''; // Clear the list
@@ -159,19 +200,18 @@
             });
         }
 
-        function checkForAlert(objects) {
-            const unauthorizedDetected = objects.some(object => unauthorizedObjects.includes(object.toLowerCase())); // Case-insensitive check
-            if (unauthorizedDetected) {
-                alertBox.style.display = 'block';
-            } else {
-                alertBox.style.display = 'none';
-            }
+        // Initialize
+        async function init() {
+            await loadModel();
+            await getCameraStream(video1);
+            await getCameraStream(video2);
+
+            // Start detection loops
+            setInterval(() => detectObjects(video1, overlay1), detectionInterval);
+            setInterval(() => detectObjects(video2, overlay2), detectionInterval);
         }
 
-        // Start the camera and analysis
-        getCameraStream().then(() => {
-            analyzeFrame();
-        });
+        init();
 
     </script>
 </body>
