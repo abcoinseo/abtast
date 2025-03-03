@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Webcam Fun</title>
+<title>Pro Webcam with Hand Tracking</title>
 <style>
 body {
   font-family: sans-serif;
@@ -20,10 +20,10 @@ body {
 }
 
 #video {
-  width: 640px; /* Adjust as needed */
-  height: 480px; /* Adjust as needed */
+  width: 640px;
+  height: 480px;
   background-color: black;
-  object-fit: cover; /* Prevents distortion */
+  object-fit: cover;
 }
 
 #overlay {
@@ -32,7 +32,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Allows clicks through to video */
+  pointer-events: none;
 }
 
 #controls {
@@ -57,15 +57,21 @@ button:hover {
 #flashlight-button {
   background-color: #333;
 }
+
 #flashlight-button.active {
   background-color: yellow;
   color: black;
 }
 </style>
+<!-- Include TensorFlow.js and MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+
 </head>
 <body>
 
-<h1>Webcam Fun</h1>
+<h1>Pro Webcam with Hand Tracking</h1>
 
 <div id="container">
   <video id="video" autoplay muted playsinline></video>
@@ -88,24 +94,44 @@ const timerButton = document.getElementById('timer-button');
 
 let stream = null;
 let flashlightOn = false;
+let handposeModel = null;  //MediaPipe hand tracking model
 
 // Get User Media (Webcam Access)
 async function startWebcam() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
     video.srcObject = stream;
+
+    // Load the hand tracking model
+    await loadHandposeModel();
+
+    // Start the hand tracking loop
+    video.addEventListener('loadeddata', predictHands);
+
   } catch (err) {
     console.error("Error accessing webcam:", err);
     alert("Error accessing webcam. Make sure you have a camera and have granted permission.");
   }
 }
 
+// Load MediaPipe Handpose Model (TensorFlow.js)
+async function loadHandposeModel() {
+  try {
+    handposeModel = await handpose.load();
+    console.log("Handpose model loaded.");
+
+  } catch (error) {
+    console.error("Error loading handpose model:", error);
+    alert("Error loading hand tracking model. Check your internet connection.");
+  }
+}
+
 // Stop Webcam
 function stopWebcam() {
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
-    }
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    video.srcObject = null;
+  }
 }
 
 // Capture Image
@@ -115,7 +141,6 @@ captureButton.addEventListener('click', () => {
   canvas.height = video.videoHeight;
   canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  // Convert to data URL and create a download link
   const dataURL = canvas.toDataURL('image/png');
   const a = document.createElement('a');
   a.href = dataURL;
@@ -126,7 +151,6 @@ captureButton.addEventListener('click', () => {
   document.body.removeChild(a);
 });
 
-
 // Flashlight (Basic) - This is very limited on mobile browsers
 flashlightButton.addEventListener('click', () => {
   flashlightOn = !flashlightOn;
@@ -134,12 +158,12 @@ flashlightButton.addEventListener('click', () => {
 
   if (stream) {
     const track = stream.getVideoTracks()[0];
-    const capabilities = track.getCapabilities(); //Check what the camera supports.
-    if ('torch' in capabilities) {  //Check if the camera supports flashlight feature.
+    const capabilities = track.getCapabilities();
+    if ('torch' in capabilities) {
       track.applyConstraints({ advanced: [{ torch: flashlightOn }] })
-        .catch(error => console.error('Torch Error: ', error)); //Error handling is important
+        .catch(error => console.error('Torch Error: ', error));
     } else {
-      alert("Flashlight not supported by your camera."); //Inform user.
+      alert("Flashlight not supported by your camera.");
     }
   } else {
     alert("Start the webcam first!");
@@ -149,55 +173,89 @@ flashlightButton.addEventListener('click', () => {
 // 3-Second Timer
 timerButton.addEventListener('click', () => {
   let countdown = 3;
-  timerButton.disabled = true; //Disable the button during countdown.
+  timerButton.disabled = true;
   const interval = setInterval(() => {
     alert(countdown);
     countdown--;
     if (countdown < 0) {
       clearInterval(interval);
-      captureButton.click(); // Simulate a click on the capture button
-      timerButton.disabled = false; //Enable the button again
+      captureButton.click();
+      timerButton.disabled = false;
     }
   }, 1000);
 });
 
-// **Hand Detection (VERY Simplified)**
-// This will be very basic and inaccurate without a proper hand tracking library
-function detectHandMotion() {
-    overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+let lastHandPosition = null; // To track hand movement.
 
-    // Capture a frame from the video
-    overlayContext.drawImage(video, 0, 0, overlayCanvas.width, overlayCanvas.height);
-
-    // Get image data (grayscale conversion for simplicity)
-    const imageData = overlayContext.getImageData(0, 0, overlayCanvas.width, overlayCanvas.height);
-    const data = imageData.data;
-    let totalBrightness = 0;
-
-    for (let i = 0; i < data.length; i += 4) {
-        // Simple grayscale conversion
-        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        totalBrightness += brightness;
+// Hand Tracking and Motion Scoring using MediaPipe
+async function predictHands() {
+    if (!handposeModel) {
+        return; // Model not loaded yet.
     }
 
-    const averageBrightness = totalBrightness / (overlayCanvas.width * overlayCanvas.height);
+    try {
+        const predictions = await handposeModel.estimateHands(video);
 
-    // Basic motion detection (comparing with a previous frame would be better)
-    // Adjust this threshold as needed
-    if (averageBrightness > 100) {
-        console.log("Potential Hand Motion Detected!");
-        // You could trigger some action here (e.g., speed up, no entry)
+        overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+        if (predictions.length > 0) {
+            const hand = predictions[0]; // Assuming only one hand for simplicity
+
+            drawHandKeypoints(hand.landmarks);
+
+            // Calculate motion score based on hand movement
+            const motionScore = calculateMotionScore(hand.landmarks);
+            console.log("Motion Score:", motionScore);
+
+            // You can use the motionScore to trigger actions
+            if (motionScore > 50) { // Adjust threshold as needed
+                console.log("Significant Hand Motion Detected!");
+                // Trigger action (e.g., "No Entry" alert, speed control, etc.)
+            }
+        }
+    } catch (error) {
+        console.error("Error predicting hands:", error);
+    }
+
+    requestAnimationFrame(predictHands); // Keep predicting
+}
+
+function drawHandKeypoints(keypoints) {
+    overlayContext.fillStyle = 'red';
+    for (const point of keypoints) {
+        const x = point[0];
+        const y = point[1];
+        overlayContext.beginPath();
+        overlayContext.arc(x, y, 5, 0, 2 * Math.PI);
+        overlayContext.fill();
     }
 }
 
+function calculateMotionScore(currentKeypoints) {
+    if (!lastHandPosition) {
+        lastHandPosition = currentKeypoints;
+        return 0;
+    }
 
-// Start the webcam on page load and setup the hand detection interval
-window.addEventListener('load', () => {
-    startWebcam();
-    setInterval(detectHandMotion, 100); // Adjust interval (milliseconds) as needed
-});
+    let totalDistance = 0;
+    for (let i = 0; i < currentKeypoints.length; i++) {
+        const x1 = currentKeypoints[i][0];
+        const y1 = currentKeypoints[i][1];
+        const x2 = lastHandPosition[i][0];
+        const y2 = lastHandPosition[i][1];
 
-// Stop the webcam on page unload, to release camera resources.
+        const distance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        totalDistance += distance;
+    }
+
+    lastHandPosition = currentKeypoints;
+    return totalDistance;
+}
+
+// Start the webcam on page load
+window.addEventListener('load', startWebcam);
+
+// Stop the webcam on page unload
 window.addEventListener('beforeunload', stopWebcam);
 
 </script>
