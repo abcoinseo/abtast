@@ -1,170 +1,267 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Pro Walkie-Talkie</title>
+<title>Pro Security Camera</title>
 <style>
 body {
   font-family: sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0;
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
+  min-height: 100vh;
+}
+
+.camera-container {
+  width: 600px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
   padding: 20px;
+  text-align: center;
+}
+
+#camera-view {
+  width: 100%;
+  height: 300px;
+  background-color: #ccc;
+  border-radius: 5px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+#camera-view img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain; /* or cover, depending on desired behavior */
+}
+
+.controls {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 20px;
+}
+
+button {
+  padding: 10px 20px;
+  border: none;
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #3e8e41;
 }
 
 #status {
-  margin-top: 10px;
   font-weight: bold;
+  color: #555;
+  margin-bottom: 10px;
 }
 
-#messages {
-  margin-top: 20px;
-  width: 300px;
-}
-
-.message {
-  padding: 8px;
-  border-bottom: 1px solid #eee;
+/* Styles for alert */
+.alert {
+  background-color: #fdd;
+  color: #a00;
+  border: 1px solid #f00;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  display: none; /* Initially hidden */
 }
 </style>
 </head>
 <body>
 
-<h1>Pro Walkie-Talkie</h1>
+<div class="camera-container">
+  <h1>Pro Security Camera</h1>
 
-<div id="status">Initializing...</div>
-<div id="messages"></div>
+  <div id="camera-view">
+    <img id="camera-image" src="placeholder_image.jpg" alt="Camera View">
+    <!-- Placeholder image.  Replace with actual camera feed or simulated feed -->
+  </div>
 
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-  import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
+  <div id="status">Status: Ready</div>
 
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-   const firebaseConfig = {
-  apiKey: "AIzaSyBQMke0SOMIq0rod6vOm4jrFJ4cExfJPNE",
-  authDomain: "ab-studio-4c309.firebaseapp.com",
-  databaseURL: "https://ab-studio-4c309-default-rtdb.firebaseio.com",
-  projectId: "ab-studio-4c309",
-  storageBucket: "ab-studio-4c309.firebasestorage.app",
-  messagingSenderId: "290321392308",
-  appId: "1:290321392308:web:eed8f4bda17a51944eade1"
-};
+  <div class="controls">
+    <button id="start-button">Start Monitoring</button>
+    <button id="stop-button" disabled>Stop Monitoring</button>
+  </div>
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const database = getDatabase(app);
-  const messagesRef = ref(database, 'messages');
+  <div id="alert-message" class="alert">
+    Motion Detected! Intruder Alert!
+  </div>
 
-  const statusDiv = document.getElementById('status');
-  const messagesDiv = document.getElementById('messages');
+  <audio id="alarm-sound" src="alarm.mp3" preload="auto"></audio>
+</div>
 
-  let speechRecognition;
-  let isListening = false;
+<script>
+// Simulated Camera Feed (Replace with real camera integration)
+const cameraImage = document.getElementById('camera-image');
+const imageUrls = [
+  "placeholder_image.jpg",
+  "scene1.jpg", //  Replace with actual images or remove.
+  "scene2.jpg",
+  "scene3.jpg"
+];
+let imageIndex = 0;
 
-  // Initialize Speech Recognition
-  function initializeSpeechRecognition() {
-    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!window.SpeechRecognition) {
-      statusDiv.textContent = "Speech recognition not supported in this browser.";
-      return;
+const statusDisplay = document.getElementById('status');
+const startButton = document.getElementById('start-button');
+const stopButton = document.getElementById('stop-button');
+const alertMessage = document.getElementById('alert-message');
+const alarmSound = document.getElementById('alarm-sound');
+
+let monitoringActive = false;
+let lastImage = null;  // Store the previous image data
+let motionThreshold = 50;  // Sensitivity: Lower = more sensitive.  Adjust as needed
+let detectionInterval = 100;  // Check every 100ms.  Adjust for performance/sensitivity.
+
+// Function to simulate a camera feed update
+function simulateCameraFeed() {
+    imageIndex = (imageIndex + 1) % imageUrls.length;
+    cameraImage.src = imageUrls[imageIndex];
+}
+
+//Function to simulate an object moving
+function simulateObjectMove() {
+  if (imageIndex === 0) {
+    cameraImage.src = "scene1.jpg";  // Initially no object
+  } else if (imageIndex === 1) {
+    cameraImage.src = "scene2.jpg";  // Object has moved slightly.
+  } else if (imageIndex === 2) {
+    cameraImage.src = "scene3.jpg";  // Object has moved more
+  } else {
+     cameraImage.src = "scene1.jpg";
+  }
+  imageIndex = (imageIndex + 1) % 4;
+}
+// Start the simulation initially
+//simulateCameraFeed();
+simulateObjectMove();
+
+
+function startMonitoring() {
+  monitoringActive = true;
+  startButton.disabled = true;
+  stopButton.disabled = false;
+  statusDisplay.textContent = "Status: Monitoring...";
+
+  //Initial Load for the Last Image
+  lastImage = getImageData(cameraImage);
+
+  //Start monitoring after an interval
+  setInterval(detectMotion, detectionInterval);
+
+  // Simulate camera updates. Remove or replace with real camera integration
+  //cameraInterval = setInterval(simulateCameraFeed, 2000);
+  //comment simulateObjectMove or cameraInterval
+   cameraInterval = setInterval(simulateObjectMove, 2000);
+
+
+}
+
+function stopMonitoring() {
+  monitoringActive = false;
+  startButton.disabled = false;
+  stopButton.disabled = true;
+  statusDisplay.textContent = "Status: Ready";
+  alertMessage.style.display = 'none'; // Hide the alert
+
+  clearInterval(detectionInterval);
+  clearInterval(cameraInterval);
+
+  alarmSound.pause();
+  alarmSound.currentTime = 0; // Reset alarm sound.
+
+}
+
+
+// Function to get image data (grayscale for simplicity)
+function getImageData(img) {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, img.width, img.height);
+  const data = imageData.data;
+  const grayscaleData = [];
+
+  for (let i = 0; i < data.length; i += 4) {
+    // Simple grayscale conversion (average of RGB)
+    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    grayscaleData.push(avg);
+  }
+  return grayscaleData;
+}
+
+
+
+// Function to detect motion
+function detectMotion() {
+    if (!monitoringActive) return;  // Stop if monitoring is disabled
+
+    const currentImage = getImageData(cameraImage);
+
+    if (lastImage === null) {
+        lastImage = currentImage;
+        return;
     }
 
-    speechRecognition = new window.SpeechRecognition();
-    speechRecognition.continuous = true;  // Keep listening
-    speechRecognition.interimResults = false; // Only final results
+    let motionDetected = false;
+    let diffSum = 0;
+    for (let i = 0; i < currentImage.length; i++) {
+        const diff = Math.abs(currentImage[i] - lastImage[i]);
+        diffSum += diff;
 
-    speechRecognition.onstart = () => {
-      isListening = true;
-      statusDiv.textContent = "Listening...";
-    };
-
-    speechRecognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(result => result[0])
-        .map(result => result.transcript)
-        .join('');
-
-      // Send the transcript to Firebase
-      push(messagesRef, { text: transcript, timestamp: Date.now() })
-        .catch(error => {
-          console.error("Error sending voice message:", error);
-          statusDiv.textContent = "Error sending message.";
-        });
-    };
-
-    speechRecognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
-      statusDiv.textContent = `Speech recognition error: ${event.error}`;
-    };
-
-    speechRecognition.onend = () => {
-      isListening = false;
-      statusDiv.textContent = "Idle. Restarting...";
-      // Restart recognition automatically if it ends unexpectedly
-      setTimeout(() => {
-          if (!isListening) {
-              startListening();
-          }
-      }, 1000); // Restart after 1 second
-    };
-  }
-
-  // Function to speak text
-  function speak(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    window.speechSynthesis.speak(utterance);
-  }
-
-  // Start Listening Function
-  function startListening() {
-      if (speechRecognition) {
-          try {
-              speechRecognition.start();
-          } catch (error) {
-              console.error("Error starting speech recognition:", error);
-              statusDiv.textContent = "Error starting recognition.";
-              setTimeout(() => {startListening()}, 5000)
-          }
-      }
-  }
-
-  // Listen for new messages
-  onValue(messagesRef, (snapshot) => {
-    const messages = snapshot.val();
-    if (messages) {
-      Object.entries(messages).forEach(([key, message]) => {
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('message');
-        messageElement.textContent = message.text;
-        messagesDiv.appendChild(messageElement);
-
-        // Speak the message ONLY if it wasn't spoken by this client
-        // (This is the key to prevent hearing yourself)
-        if (!message.isFromThisClient) {  // Add this flag when sending.
-          speak(message.text);
+        if (diff > motionThreshold) {  // Compare the difference to the threshold
+            motionDetected = true;
+            break; // Exit the loop early if significant motion is detected
         }
-
-        // Optional: Delete the message after speaking
-        remove(ref(database, `messages/${key}`))
-          .catch(error => {
-            console.error("Error deleting message:", error);
-          });
-      });
     }
 
-     //clear messages after reading
-    messagesDiv.innerHTML = '';
-
-  });
-
-  // Initialize everything when the page loads
-  window.addEventListener('load', () => {
-    initializeSpeechRecognition();
-    if (speechRecognition) {
-      startListening(); // Start listening as soon as the page loads
+     //Consider to use the sum of difference to determine if alert is triggered
+    if(motionDetected){
+        console.log("Motion Detected!");
+        showAlert();
     }
-  });
+    else{
+       console.log("Motion Not Detected!");
+    }
+
+    lastImage = currentImage;  // Update lastImage with the current image.
+}
+
+function showAlert() {
+    alertMessage.style.display = 'block';
+    alarmSound.play();
+}
+
+
+// Event listeners
+startButton.addEventListener('click', startMonitoring);
+stopButton.addEventListener('click', stopMonitoring);
+
+
+// PRE-LOAD images
+function preloadImages(imageUrls) {
+  for (let i = 0; i < imageUrls.length; i++) {
+    const img = new Image();
+    img.src = imageUrls[i];
+  }
+}
+preloadImages(imageUrls);
+
 </script>
 
 </body>
