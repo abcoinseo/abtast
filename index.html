@@ -1,267 +1,232 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Pro Security Camera</title>
+<title>Mobile Security Camera</title>
 <style>
 body {
-  font-family: sans-serif;
-  margin: 0;
-  padding: 0;
-  background-color: #f0f0f0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
 }
 
 .camera-container {
-  width: 600px;
-  background-color: #fff;
-  border-radius: 10px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
-  padding: 20px;
-  text-align: center;
+    width: 600px;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+    padding: 20px;
+    text-align: center;
 }
 
 #camera-view {
-  width: 100%;
-  height: 300px;
-  background-color: #ccc;
-  border-radius: 5px;
-  margin-bottom: 10px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
+    width: 100%;
+    height: 300px;
+    background-color: #ccc;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
 }
 
-#camera-view img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain; /* or cover, depending on desired behavior */
+#camera-view video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
 }
 
 .controls {
-  display: flex;
-  justify-content: space-around;
-  margin-bottom: 20px;
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 20px;
 }
 
 button {
-  padding: 10px 20px;
-  border: none;
-  background-color: #4CAF50;
-  color: white;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
+    padding: 10px 20px;
+    border: none;
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
 }
 
 button:hover {
-  background-color: #3e8e41;
+    background-color: #3e8e41;
 }
 
 #status {
-  font-weight: bold;
-  color: #555;
-  margin-bottom: 10px;
+    font-weight: bold;
+    color: #555;
+    margin-bottom: 10px;
 }
 
 /* Styles for alert */
 .alert {
-  background-color: #fdd;
-  color: #a00;
-  border: 1px solid #f00;
-  padding: 10px;
-  margin-bottom: 10px;
-  border-radius: 5px;
-  display: none; /* Initially hidden */
+    background-color: #fdd;
+    color: #a00;
+    border: 1px solid #f00;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    display: none; /* Initially hidden */
 }
 </style>
 </head>
 <body>
 
 <div class="camera-container">
-  <h1>Pro Security Camera</h1>
+    <h1>Pro Security Camera</h1>
 
-  <div id="camera-view">
-    <img id="camera-image" src="placeholder_image.jpg" alt="Camera View">
-    <!-- Placeholder image.  Replace with actual camera feed or simulated feed -->
-  </div>
+    <div id="camera-view">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <!-- Camera view will be displayed here -->
+    </div>
 
-  <div id="status">Status: Ready</div>
+    <div id="status">Status: Ready</div>
 
-  <div class="controls">
-    <button id="start-button">Start Monitoring</button>
-    <button id="stop-button" disabled>Stop Monitoring</button>
-  </div>
+    <div class="controls">
+        <button id="start-button">Start Monitoring</button>
+        <button id="stop-button" disabled>Stop Monitoring</button>
+    </div>
 
-  <div id="alert-message" class="alert">
-    Motion Detected! Intruder Alert!
-  </div>
+    <div id="alert-message" class="alert">
+        Motion Detected! Intruder Alert!
+    </div>
 
-  <audio id="alarm-sound" src="alarm.mp3" preload="auto"></audio>
+    <audio id="alarm-sound" src="alarm.mp3" preload="auto"></audio>
 </div>
 
 <script>
-// Simulated Camera Feed (Replace with real camera integration)
-const cameraImage = document.getElementById('camera-image');
-const imageUrls = [
-  "placeholder_image.jpg",
-  "scene1.jpg", //  Replace with actual images or remove.
-  "scene2.jpg",
-  "scene3.jpg"
-];
-let imageIndex = 0;
+    const cameraVideo = document.getElementById('camera-video');
+    const statusDisplay = document.getElementById('status');
+    const startButton = document.getElementById('start-button');
+    const stopButton = document.getElementById('stop-button');
+    const alertMessage = document.getElementById('alert-message');
+    const alarmSound = document.getElementById('alarm-sound');
 
-const statusDisplay = document.getElementById('status');
-const startButton = document.getElementById('start-button');
-const stopButton = document.getElementById('stop-button');
-const alertMessage = document.getElementById('alert-message');
-const alarmSound = document.getElementById('alarm-sound');
+    let monitoringActive = false;
+    let lastFrameData = null; // Store the previous frame data
+    let motionThreshold = 50; // Sensitivity: Lower = more sensitive. Adjust as needed
+    let detectionInterval = 100; // Check every 100ms. Adjust for performance/sensitivity.
+    let stream = null;
 
-let monitoringActive = false;
-let lastImage = null;  // Store the previous image data
-let motionThreshold = 50;  // Sensitivity: Lower = more sensitive.  Adjust as needed
-let detectionInterval = 100;  // Check every 100ms.  Adjust for performance/sensitivity.
-
-// Function to simulate a camera feed update
-function simulateCameraFeed() {
-    imageIndex = (imageIndex + 1) % imageUrls.length;
-    cameraImage.src = imageUrls[imageIndex];
-}
-
-//Function to simulate an object moving
-function simulateObjectMove() {
-  if (imageIndex === 0) {
-    cameraImage.src = "scene1.jpg";  // Initially no object
-  } else if (imageIndex === 1) {
-    cameraImage.src = "scene2.jpg";  // Object has moved slightly.
-  } else if (imageIndex === 2) {
-    cameraImage.src = "scene3.jpg";  // Object has moved more
-  } else {
-     cameraImage.src = "scene1.jpg";
-  }
-  imageIndex = (imageIndex + 1) % 4;
-}
-// Start the simulation initially
-//simulateCameraFeed();
-simulateObjectMove();
-
-
-function startMonitoring() {
-  monitoringActive = true;
-  startButton.disabled = true;
-  stopButton.disabled = false;
-  statusDisplay.textContent = "Status: Monitoring...";
-
-  //Initial Load for the Last Image
-  lastImage = getImageData(cameraImage);
-
-  //Start monitoring after an interval
-  setInterval(detectMotion, detectionInterval);
-
-  // Simulate camera updates. Remove or replace with real camera integration
-  //cameraInterval = setInterval(simulateCameraFeed, 2000);
-  //comment simulateObjectMove or cameraInterval
-   cameraInterval = setInterval(simulateObjectMove, 2000);
-
-
-}
-
-function stopMonitoring() {
-  monitoringActive = false;
-  startButton.disabled = false;
-  stopButton.disabled = true;
-  statusDisplay.textContent = "Status: Ready";
-  alertMessage.style.display = 'none'; // Hide the alert
-
-  clearInterval(detectionInterval);
-  clearInterval(cameraInterval);
-
-  alarmSound.pause();
-  alarmSound.currentTime = 0; // Reset alarm sound.
-
-}
-
-
-// Function to get image data (grayscale for simplicity)
-function getImageData(img) {
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, img.width, img.height);
-  const data = imageData.data;
-  const grayscaleData = [];
-
-  for (let i = 0; i < data.length; i += 4) {
-    // Simple grayscale conversion (average of RGB)
-    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    grayscaleData.push(avg);
-  }
-  return grayscaleData;
-}
-
-
-
-// Function to detect motion
-function detectMotion() {
-    if (!monitoringActive) return;  // Stop if monitoring is disabled
-
-    const currentImage = getImageData(cameraImage);
-
-    if (lastImage === null) {
-        lastImage = currentImage;
-        return;
-    }
-
-    let motionDetected = false;
-    let diffSum = 0;
-    for (let i = 0; i < currentImage.length; i++) {
-        const diff = Math.abs(currentImage[i] - lastImage[i]);
-        diffSum += diff;
-
-        if (diff > motionThreshold) {  // Compare the difference to the threshold
-            motionDetected = true;
-            break; // Exit the loop early if significant motion is detected
+    // Function to access the camera
+    async function startCamera() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            cameraVideo.srcObject = stream;
+            statusDisplay.textContent = "Status: Camera Ready";
+        } catch (error) {
+            console.error("Error accessing camera:", error);
+            statusDisplay.textContent = "Status: Camera Error - " + error.message;
+            alert("Error accessing camera. Please make sure you have granted permission.");
         }
     }
 
-     //Consider to use the sum of difference to determine if alert is triggered
-    if(motionDetected){
-        console.log("Motion Detected!");
-        showAlert();
+    // Function to start monitoring
+    function startMonitoring() {
+        if (!stream) {
+            alert("Camera not initialized. Please try again.");
+            return;
+        }
+
+        monitoringActive = true;
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        statusDisplay.textContent = "Status: Monitoring...";
+
+        // Initialize the last frame data
+        lastFrameData = captureFrame(cameraVideo);
+
+        // Start motion detection interval
+        motionDetectionInterval = setInterval(detectMotion, detectionInterval);
     }
-    else{
-       console.log("Motion Not Detected!");
+
+    // Function to stop monitoring
+    function stopMonitoring() {
+        monitoringActive = false;
+        startButton.disabled = false;
+        stopButton.disabled = true;
+        statusDisplay.textContent = "Status: Ready";
+        alertMessage.style.display = 'none';
+
+        clearInterval(motionDetectionInterval);
+        alarmSound.pause();
+        alarmSound.currentTime = 0;
     }
 
-    lastImage = currentImage;  // Update lastImage with the current image.
-}
+    // Function to capture a frame from the video
+    function captureFrame(video) {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return getImageData(canvas);
+    }
 
-function showAlert() {
-    alertMessage.style.display = 'block';
-    alarmSound.play();
-}
+    // Function to get image data (grayscale for simplicity)
+    function getImageData(canvas) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const grayscaleData = [];
 
+        for (let i = 0; i < data.length; i += 4) {
+            // Simple grayscale conversion (average of RGB)
+            const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            grayscaleData.push(avg);
+        }
+        return grayscaleData;
+    }
 
-// Event listeners
-startButton.addEventListener('click', startMonitoring);
-stopButton.addEventListener('click', stopMonitoring);
+    // Function to detect motion
+    function detectMotion() {
+        if (!monitoringActive) return;
 
+        const currentFrameData = captureFrame(cameraVideo);
 
-// PRE-LOAD images
-function preloadImages(imageUrls) {
-  for (let i = 0; i < imageUrls.length; i++) {
-    const img = new Image();
-    img.src = imageUrls[i];
-  }
-}
-preloadImages(imageUrls);
+        if (lastFrameData === null) {
+            lastFrameData = currentFrameData;
+            return;
+        }
 
+        let motionDetected = false;
+        for (let i = 0; i < currentFrameData.length; i++) {
+            const diff = Math.abs(currentFrameData[i] - lastFrameData[i]);
+            if (diff > motionThreshold) {
+                motionDetected = true;
+                break;
+            }
+        }
+
+        if (motionDetected) {
+            console.log("Motion Detected!");
+            showAlert();
+        }
+
+        lastFrameData = currentFrameData;
+    }
+
+    // Function to show alert
+    function showAlert() {
+        alertMessage.style.display = 'block';
+        alarmSound.play();
+    }
+
+    // Event listeners
+    startButton.addEventListener('click', startMonitoring);
+    stopButton.addEventListener('click', stopMonitoring);
+
+    // Start the camera when the page loads
+    startCamera();
 </script>
 
 </body>
