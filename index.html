@@ -1,218 +1,206 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Object Detection Camera</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            background-color: #111; /* Dark background */
-            color: #ddd;
-            display: flex;
-            flex-direction: column; /* Up-to-down layout */
-            align-items: center;
-            padding: 20px;
-        }
+<title>Webcam Fun</title>
+<style>
+body {
+  font-family: sans-serif;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background-color: #222;
+  color: #eee;
+}
 
-        h1 {
-            color: #00bcd4; /* Jarvis-like color */
-            margin-bottom: 20px;
-        }
+#container {
+  position: relative;
+}
 
-        .camera-container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            margin-bottom: 20px;
-        }
+#video {
+  width: 640px; /* Adjust as needed */
+  height: 480px; /* Adjust as needed */
+  background-color: black;
+  object-fit: cover; /* Prevents distortion */
+}
 
-        .camera-feed {
-            width: 100%;
-            height: 100%;
-            background-color: #222;
-        }
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Allows clicks through to video */
+}
 
-        .object-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none; /* Allow clicks to pass through */
-        }
+#controls {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
 
-        #alert-box {
-            background-color: #d32f2f; /* Red alert */
-            color: white;
-            padding: 10px;
-            margin-top: 10px;
-            border-radius: 5px;
-            display: none;
-        }
+button {
+  padding: 8px 12px;
+  background-color: #444;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+}
 
-        #object-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
+button:hover {
+  background-color: #555;
+}
 
-        #object-list li {
-          margin-bottom: 5px;
-          padding: 5px;
-          background-color: #444;
-          border-radius: 5px;
-        }
-
-    </style>
-    <!-- Include TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
-    <!-- Include COCO-SSD model (or your preferred model) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
-    <!-- *IMPORTANT*:  Replace these with *LOCAL* files for production! -->
+#flashlight-button {
+  background-color: #333;
+}
+#flashlight-button.active {
+  background-color: yellow;
+  color: black;
+}
+</style>
 </head>
 <body>
 
-    <h1>Advanced Object Detection System</h1>
+<h1>Webcam Fun</h1>
 
-    <div class="camera-container">
-        <h2>Camera 1</h2>
-        <video id="camera-feed-1" class="camera-feed" autoplay muted></video>
-        <canvas id="object-overlay-1" class="object-overlay"></canvas>
-    </div>
+<div id="container">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay" width="640" height="480"></canvas>
+</div>
 
-    <div class="camera-container">
-        <h2>Camera 2</h2>
-        <video id="camera-feed-2" class="camera-feed" autoplay muted></video>
-        <canvas id="object-overlay-2" class="object-overlay"></canvas>
-    </div>
+<div id="controls">
+  <button id="capture-button">Capture</button>
+  <button id="flashlight-button">Flashlight</button>
+  <button id="timer-button">3-Second Timer</button>
+</div>
 
-    <h2>Detected Objects:</h2>
-    <ul id="object-list"></ul>
+<script>
+const video = document.getElementById('video');
+const overlayCanvas = document.getElementById('overlay');
+const overlayContext = overlayCanvas.getContext('2d');
+const captureButton = document.getElementById('capture-button');
+const flashlightButton = document.getElementById('flashlight-button');
+const timerButton = document.getElementById('timer-button');
 
-    <div id="alert-box">
-        <strong>Alert:</strong> Unauthorized object detected! No Entry!
-    </div>
+let stream = null;
+let flashlightOn = false;
 
-    <script>
-        // Configuration
-        const unauthorizedObjects = ['person', 'car'];
-        const detectionInterval = 1000; // Milliseconds
-        const confidenceThreshold = 0.5; // Minimum confidence for detection
+// Get User Media (Webcam Access)
+async function startWebcam() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    video.srcObject = stream;
+  } catch (err) {
+    console.error("Error accessing webcam:", err);
+    alert("Error accessing webcam. Make sure you have a camera and have granted permission.");
+  }
+}
 
-        // Get DOM elements
-        const video1 = document.getElementById('camera-feed-1');
-        const video2 = document.getElementById('camera-feed-2');
-        const overlay1 = document.getElementById('object-overlay-1');
-        const overlay2 = document.getElementById('object-overlay-2');
-        const alertBox = document.getElementById('alert-box');
-        const objectList = document.getElementById('object-list');
+// Stop Webcam
+function stopWebcam() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+    }
+}
 
-        let model = null; // TensorFlow.js model
-        let speaking = false; // Flag to prevent overlapping speech
+// Capture Image
+captureButton.addEventListener('click', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        async function loadModel() {
-            try {
-                model = await cocoSsd.load(); // Use cocoSsd for now
-                console.log("Model loaded.");
-            } catch (error) {
-                console.error("Error loading model:", error);
-                alert("Failed to load object detection model. Check console for errors.");
-            }
-        }
+  // Convert to data URL and create a download link
+  const dataURL = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = dataURL;
+  a.download = 'webcam_capture.png';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
 
-        async function getCameraStream(videoElement) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                videoElement.srcObject = stream;
-            } catch (error) {
-                console.error('Error accessing camera:', error);
-                alert('Error accessing camera.  Ensure you have a camera and have granted permission.');
-            }
-        }
 
-        function detectObjects(videoElement, overlayElement) {
-            if (!model) return; // Model not loaded yet
+// Flashlight (Basic) - This is very limited on mobile browsers
+flashlightButton.addEventListener('click', () => {
+  flashlightOn = !flashlightOn;
+  flashlightButton.classList.toggle('active', flashlightOn);
 
-            model.detect(videoElement)
-                .then(predictions => {
-                    drawBoxes(predictions, videoElement, overlayElement);
-                    const detectedObjectNames = predictions.map(p => p.class);
-                    displayObjects(detectedObjectNames);
-                    checkForAlert(detectedObjectNames);
-                })
-                .catch(error => {
-                    console.error("Error detecting objects:", error);
-                });
-        }
+  if (stream) {
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities(); //Check what the camera supports.
+    if ('torch' in capabilities) {  //Check if the camera supports flashlight feature.
+      track.applyConstraints({ advanced: [{ torch: flashlightOn }] })
+        .catch(error => console.error('Torch Error: ', error)); //Error handling is important
+    } else {
+      alert("Flashlight not supported by your camera."); //Inform user.
+    }
+  } else {
+    alert("Start the webcam first!");
+  }
+});
 
-        function drawBoxes(predictions, videoElement, overlayElement) {
-            const ctx = overlayElement.getContext('2d');
-            ctx.clearRect(0, 0, overlayElement.width, overlayElement.height); // Clear previous boxes
-            overlayElement.width = videoElement.videoWidth;
-            overlayElement.height = videoElement.videoHeight;
+// 3-Second Timer
+timerButton.addEventListener('click', () => {
+  let countdown = 3;
+  timerButton.disabled = true; //Disable the button during countdown.
+  const interval = setInterval(() => {
+    alert(countdown);
+    countdown--;
+    if (countdown < 0) {
+      clearInterval(interval);
+      captureButton.click(); // Simulate a click on the capture button
+      timerButton.disabled = false; //Enable the button again
+    }
+  }, 1000);
+});
 
-            predictions.forEach(prediction => {
-                if (prediction.score > confidenceThreshold) {
-                    const [x, y, width, height] = prediction.bbox;
+// **Hand Detection (VERY Simplified)**
+// This will be very basic and inaccurate without a proper hand tracking library
+function detectHandMotion() {
+    overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-                    ctx.beginPath();
-                    ctx.rect(x, y, width, height);
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = '#00bcd4'; // Highlight color
-                    ctx.fillStyle = '#00bcd422'; // Semi-transparent fill
-                    ctx.fill();
-                    ctx.stroke();
+    // Capture a frame from the video
+    overlayContext.drawImage(video, 0, 0, overlayCanvas.width, overlayCanvas.height);
 
-                    ctx.font = '16px sans-serif';
-                    ctx.fillStyle = '#fff';
-                    ctx.fillText(prediction.class + ' (' + Math.round(prediction.score * 100) + '%)', x + 5, y + 20);
-                }
-            });
-        }
+    // Get image data (grayscale conversion for simplicity)
+    const imageData = overlayContext.getImageData(0, 0, overlayCanvas.width, overlayCanvas.height);
+    const data = imageData.data;
+    let totalBrightness = 0;
 
-        function checkForAlert(objects) {
-          const unauthorizedDetected = objects.some(object => unauthorizedObjects.includes(object.toLowerCase()));
+    for (let i = 0; i < data.length; i += 4) {
+        // Simple grayscale conversion
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        totalBrightness += brightness;
+    }
 
-            if (unauthorizedDetected && !speaking) {
-                speaking = true;
-                speak("Unauthorized object detected! No Entry!");
-                alertBox.style.display = 'block';
-                setTimeout(() => {
-                    speaking = false; // Allow speaking again after a delay
-                    alertBox.style.display = 'none';
-                }, 5000); // Alert for 5 seconds
-            }
+    const averageBrightness = totalBrightness / (overlayCanvas.width * overlayCanvas.height);
 
-        }
+    // Basic motion detection (comparing with a previous frame would be better)
+    // Adjust this threshold as needed
+    if (averageBrightness > 100) {
+        console.log("Potential Hand Motion Detected!");
+        // You could trigger some action here (e.g., speed up, no entry)
+    }
+}
 
-        function speak(text) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            window.speechSynthesis.speak(utterance);
-        }
 
-        function displayObjects(objects) {
-            objectList.innerHTML = ''; // Clear the list
-            objects.forEach(objectName => {
-                const listItem = document.createElement('li');
-                listItem.textContent = objectName;
-                objectList.appendChild(listItem);
-            });
-        }
+// Start the webcam on page load and setup the hand detection interval
+window.addEventListener('load', () => {
+    startWebcam();
+    setInterval(detectHandMotion, 100); // Adjust interval (milliseconds) as needed
+});
 
-        // Initialize
-        async function init() {
-            await loadModel();
-            await getCameraStream(video1);
-            await getCameraStream(video2);
+// Stop the webcam on page unload, to release camera resources.
+window.addEventListener('beforeunload', stopWebcam);
 
-            // Start detection loops
-            setInterval(() => detectObjects(video1, overlay1), detectionInterval);
-            setInterval(() => detectObjects(video2, overlay2), detectionInterval);
-        }
+</script>
 
-        init();
-
-    </script>
 </body>
 </html>
